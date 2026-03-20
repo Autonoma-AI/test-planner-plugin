@@ -15,20 +15,10 @@ Do NOT skip steps. Do NOT proceed if validation fails.
 
 ## CRITICAL: User Confirmation Between Steps
 
-After each step (1, 2, and 3), you MUST explicitly ask the user for confirmation using an
-interactive tool — NOT just printing text. Use whichever of these tools is available to you:
-- `mcp__conductor__AskUserQuestion` (preferred — shows a UI prompt with options)
-- `AskUserQuestion`
-
-Call the tool with the confirmation question and provide options like
-`["Yes, proceed to Step N", "I want to suggest changes"]`.
-
-After calling the ask tool, **end your turn and wait for the response**. Do NOT call any
-more tools. Do NOT spawn the next subagent. Do NOT continue with any work.
-Only after the user explicitly confirms should you proceed to the next step.
-
-If no interactive ask tool is available, end your message with the confirmation question
-and stop — do NOT continue until the user replies.
+After each step (1, 2, and 3), you MUST present the summary and then **completely stop**.
+Do NOT call any more tools. Do NOT spawn the next subagent. Do NOT continue with any work.
+Your turn MUST end with the confirmation question — nothing else after it.
+The user will reply in their next message. Only proceed to the next step after they confirm.
 
 ## Before Starting
 
@@ -52,10 +42,9 @@ Spawn the `kb-generator` subagent with the following task:
 1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
 2. The PostToolUse hook will have validated the frontmatter and features.json schema automatically
 3. Read the file and present the frontmatter to the user — specifically the core_flows table
-4. Use the `AskUserQuestion` or `mcp__conductor__AskUserQuestion` tool to ask:
-   **"Does this core flows table look correct? These flows determine how the test budget is distributed."**
-   Options: `["Yes, proceed to Step 2", "I want to suggest changes"]`
-5. **STOP. Wait for the user's answer. Do NOT spawn any agents or call any other tools.**
+4. End your turn with exactly this question (nothing after it):
+   **"Does this core flows table look correct? These flows determine how the test budget is distributed. Reply 'yes' to proceed to Step 2, or suggest changes."**
+5. **STOP HERE. Your turn is over. Do NOT call any tools. Do NOT spawn any agents. Do NOT write any more text after the question.**
 
 ## Step 2: Generate Scenarios
 
@@ -70,10 +59,9 @@ Spawn the `scenario-generator` subagent with the following task:
 1. Verify `autonoma/scenarios.md` exists and is non-empty
 2. The PostToolUse hook will have validated the frontmatter format automatically
 3. Read the file and present the frontmatter summary to the user — scenario names, entity counts, entity types
-4. Use the `AskUserQuestion` or `mcp__conductor__AskUserQuestion` tool to ask:
-   **"Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests."**
-   Options: `["Yes, proceed to Step 3", "I want to suggest changes"]`
-5. **STOP. Wait for the user's answer. Do NOT spawn any agents or call any other tools.**
+4. End your turn with exactly this question (nothing after it):
+   **"Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests. Reply 'yes' to proceed to Step 3, or suggest changes."**
+5. **STOP HERE. Your turn is over. Do NOT call any tools. Do NOT spawn any agents. Do NOT write any more text after the question.**
 
 ## Step 3: Generate E2E Test Cases
 
@@ -91,10 +79,9 @@ Spawn the `test-case-generator` subagent with the following task:
 1. Verify `autonoma/qa-tests/INDEX.md` exists and is non-empty
 2. The PostToolUse hook will have validated the INDEX frontmatter and individual test file frontmatter
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
-4. Use the `AskUserQuestion` or `mcp__conductor__AskUserQuestion` tool to ask:
-   **"Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app."**
-   Options: `["Yes, proceed to Step 4", "I want to suggest changes"]`
-5. **STOP. Wait for the user's answer. Do NOT spawn any agents or call any other tools.**
+4. End your turn with exactly this question (nothing after it):
+   **"Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app. Reply 'yes' to proceed to Step 4, or suggest changes."**
+5. **STOP HERE. Your turn is over. Do NOT call any tools. Do NOT spawn any agents. Do NOT write any more text after the question.**
 
 ## Step 4: Implement Environment Factory
 
