@@ -1,0 +1,16 @@
+{
+  "name": "autonoma",
+  "owner": {
+    "name": "Autonoma"
+  },
+  "metadata": {
+    "description": "Autonoma plugins for AI-powered E2E test generation"
+  },
+  "plugins": [
+    {
+      "name": "autonoma-test-planner",
+      "source": ".",
+      "description": "Generates comprehensive E2E test cases through a validated 4-step pipeline with deterministic validation"
+    }
+  ]
+}
