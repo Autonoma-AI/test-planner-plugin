@@ -103,8 +103,40 @@ if not isinstance(tmin, int) or not isinstance(tmax, int):
 if tmin > tmax:
     print('expected_test_range_min must be <= expected_test_range_max')
     sys.exit(1)
-if tt < tmin or tt > tmax:
-    print(f'total_tests ({tt}) is outside expected range [{tmin}, {tmax}] based on {rf} routes/features. Adjust test count or range.')
+if tt < tmin:
+    print(f'total_tests ({tt}) is below minimum ({tmin}) for {rf} routes/features. Too few tests — add more coverage.')
     sys.exit(1)
+
+# --- Independent file count check ---
+# Count route/page files in the codebase to sanity-check the agent's routes_or_features number.
+# This catches cases where the agent underreports features to justify fewer tests.
+import os, glob
+
+index_dir = os.path.dirname(filepath)  # autonoma/qa-tests/
+project_root = os.path.dirname(os.path.dirname(index_dir))  # project root
+
+route_patterns = [
+    '**/page.tsx', '**/page.jsx', '**/page.ts', '**/page.js',       # Next.js app router
+    'pages/**/*.tsx', 'pages/**/*.jsx', 'pages/**/*.ts',             # Next.js pages router
+    'src/pages/**/*.tsx', 'src/pages/**/*.jsx',                      # Vite/CRA
+    'src/routes/**/*.tsx', 'src/routes/**/*.jsx',                    # Remix/React Router
+    '**/+page.svelte',                                               # SvelteKit
+    'src/views/**/*.vue',                                            # Vue
+    'lib/*_web/controllers/**/*.ex',                                 # Phoenix
+    'app/controllers/**/*.rb',                                       # Rails
+]
+
+found_files = set()
+for pattern in route_patterns:
+    found_files.update(glob.glob(os.path.join(project_root, pattern), recursive=True))
+
+if found_files:
+    file_count = len(found_files)
+    min_tests_for_files = file_count * 2  # gross lower bound: at least 2 tests per route file
+    if tt < min_tests_for_files:
+        print(f'total_tests ({tt}) looks too low for a project with {file_count} route/page files. '
+              f'Expected at least {min_tests_for_files} tests (2 per route file). '
+              f'Agent reported {rf} routes/features but {file_count} route files were found independently.')
+        sys.exit(1)
 
 print('OK')
