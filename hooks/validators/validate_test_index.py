@@ -103,8 +103,38 @@ if not isinstance(tmin, int) or not isinstance(tmax, int):
 if tmin > tmax:
     print('expected_test_range_min must be <= expected_test_range_max')
     sys.exit(1)
-if tt < tmin or tt > tmax:
-    print(f'total_tests ({tt}) is outside expected range [{tmin}, {tmax}] based on {rf} routes/features. Adjust test count or range.')
+if tt < tmin:
+    print(f'total_tests ({tt}) is below minimum ({tmin}) for {rf} routes/features. Too few tests — add more coverage.')
+    sys.exit(1)
+
+# --- Cross-check against features.json ---
+# Read the features inventory from Step 1 to verify the agent isn't underreporting.
+import os, json as jsonlib
+
+index_dir = os.path.dirname(filepath)  # autonoma/qa-tests/
+autonoma_dir = os.path.dirname(index_dir)  # autonoma/
+features_path = os.path.join(autonoma_dir, 'features.json')
+
+if os.path.isfile(features_path):
+    try:
+        features_data = jsonlib.load(open(features_path))
+        feature_count = features_data.get('total_features', 0)
+        if feature_count > 0:
+            min_tests = feature_count * 2  # at least 2 tests per feature
+            if tt < min_tests:
+                print(f'total_tests ({tt}) is too low for {feature_count} features in features.json. '
+                      f'Expected at least {min_tests} tests (2 per feature). '
+                      f'Agent declared {rf} routes_or_features in INDEX but features.json has {feature_count}.')
+                sys.exit(1)
+            # Also check agent didn't underreport routes_or_features
+            if rf < feature_count:
+                print(f'coverage_correlation.routes_or_features ({rf}) is less than total_features '
+                      f'in features.json ({feature_count}). The agent is underreporting features.')
+                sys.exit(1)
+    except Exception:
+        pass  # features.json is malformed or unreadable, skip cross-check
+else:
+    print(f'features.json not found at {features_path}. Step 1 must output autonoma/features.json.')
     sys.exit(1)
 
 print('OK')

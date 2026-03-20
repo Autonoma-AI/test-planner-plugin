@@ -36,6 +36,8 @@ You generate a structured knowledge base for a codebase. Your output MUST be wri
 
 4. Write the output to `autonoma/AUTONOMA.md`.
 
+5. Write `autonoma/features.json` — a machine-readable inventory of every feature discovered.
+
 ## CRITICAL: Output Format
 
 The output file `autonoma/AUTONOMA.md` MUST start with YAML frontmatter in this exact format:
@@ -85,6 +87,52 @@ The rest of the file follows the standard AUTONOMA.md format from the fetched in
 - Core flows (detailed)
 - UI patterns
 - Preferences
+
+## CRITICAL: features.json Format
+
+You MUST also write `autonoma/features.json` with this exact schema:
+
+```json
+{
+  "features": [
+    {
+      "name": "Login",
+      "type": "page",
+      "path": "/login",
+      "core": true
+    },
+    {
+      "name": "Dashboard",
+      "type": "page",
+      "path": "/dashboard",
+      "core": true
+    },
+    {
+      "name": "Create User API",
+      "type": "api",
+      "path": "/api/users",
+      "core": false
+    }
+  ],
+  "total_features": 3,
+  "total_routes": 2,
+  "total_api_routes": 1
+}
+```
+
+### features.json Rules
+
+- **features**: Array of ALL features/routes/pages/APIs discovered. Each entry has:
+  - `name`: Human-readable feature name (string, non-empty)
+  - `type`: One of `page`, `api`, `flow`, `component`, `modal`, `settings`
+  - `path`: The route path or file path (string, non-empty)
+  - `core`: Boolean — must match the core_flows in AUTONOMA.md frontmatter
+- **total_features**: Must equal the length of the features array
+- **total_routes**: Count of features with type `page`
+- **total_api_routes**: Count of features with type `api`
+
+This file is used by Step 3's validator to verify the test count is proportional to the project size.
+Write features.json AFTER AUTONOMA.md — the features must be consistent with the core_flows frontmatter.
 
 ## Validation
 

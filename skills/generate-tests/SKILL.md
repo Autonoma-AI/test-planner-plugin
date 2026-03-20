@@ -27,11 +27,13 @@ Spawn the `kb-generator` subagent with the following task:
 > Analyze the codebase and generate the knowledge base. Write the output to `autonoma/AUTONOMA.md`
 > and create skill files in `autonoma/skills/`. The file MUST have YAML frontmatter with
 > app_name, app_description, core_flows (feature/description/core table), feature_count, and skill_count.
+> You MUST also write `autonoma/features.json` — a machine-readable inventory of every feature discovered.
+> It must have: features array (each with name, type, path, core), total_features, total_routes, total_api_routes.
 > Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-1-knowledge-base.txt first.
 
 **After the subagent completes:**
-1. Verify `autonoma/AUTONOMA.md` exists and is non-empty
-2. The PostToolUse hook will have validated the frontmatter format automatically
+1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
+2. The PostToolUse hook will have validated the frontmatter and features.json schema automatically
 3. Read the file and present the frontmatter to the user — specifically the core_flows table
 4. Ask the user: "Does this core flows table look correct? These flows determine how the test budget is distributed. Please confirm or suggest changes before I proceed to Step 2."
 5. **Do NOT proceed until the user confirms.**
