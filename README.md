@@ -6,8 +6,11 @@ Each step runs in an isolated subagent with deterministic validation — shell s
 
 ## Install
 
-```bash
-claude plugin add github:Autonoma-AI/test-planner-plugin
+Add the marketplace and install the plugin:
+
+```
+/plugin marketplace add Autonoma-AI/test-planner-plugin
+/plugin install autonoma-test-planner@autonoma
 ```
 
 ## Usage
@@ -15,7 +18,7 @@ claude plugin add github:Autonoma-AI/test-planner-plugin
 Inside any project with Claude Code:
 
 ```
-/generate-tests
+/autonoma-test-planner:generate-tests
 ```
 
 The plugin walks you through 4 steps, asking for confirmation at each checkpoint before proceeding.
@@ -95,7 +98,9 @@ claude plugin validate ./
 
 ```
 autonoma-test-planner/
-├── .claude-plugin/plugin.json          # Plugin manifest
+├── .claude-plugin/
+│   ├── plugin.json                     # Plugin manifest
+│   └── marketplace.json                # Marketplace catalog
 ├── skills/generate-tests/SKILL.md      # /generate-tests orchestrator
 ├── agents/
 │   ├── kb-generator.md                 # Step 1 subagent
