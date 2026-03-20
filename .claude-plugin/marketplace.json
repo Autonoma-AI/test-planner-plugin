@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "autonoma-test-planner",
-      "source": ".",
+      "source": "./",
       "description": "Generates comprehensive E2E test cases through a validated 4-step pipeline with deterministic validation"
     }
   ]
