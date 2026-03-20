@@ -16,10 +16,10 @@ Do NOT skip steps. Do NOT proceed if validation fails.
 ## CRITICAL: User Confirmation Between Steps
 
 After each step (1, 2, and 3), you MUST present the summary and then ask the user for
-confirmation using the `mcp__conductor__AskUserQuestion` tool. This creates an interactive
+confirmation using the `AskUserQuestion` tool. This creates an interactive
 UI prompt that makes it clear the user needs to respond before the pipeline continues.
 
-After calling `mcp__conductor__AskUserQuestion`, wait for the user's response.
+After calling `AskUserQuestion`, wait for the user's response.
 Only proceed to the next step after they confirm.
 
 ## Before Starting
@@ -44,7 +44,7 @@ Spawn the `kb-generator` subagent with the following task:
 1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
 2. The PostToolUse hook will have validated the frontmatter and features.json schema automatically
 3. Read the file and present the frontmatter to the user — specifically the core_flows table
-4. Call `mcp__conductor__AskUserQuestion` with:
+4. Call `AskUserQuestion` with:
    - question: "Does this core flows table look correct? These flows determine how the test budget is distributed."
    - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
@@ -62,7 +62,7 @@ Spawn the `scenario-generator` subagent with the following task:
 1. Verify `autonoma/scenarios.md` exists and is non-empty
 2. The PostToolUse hook will have validated the frontmatter format automatically
 3. Read the file and present the frontmatter summary to the user — scenario names, entity counts, entity types
-4. Call `mcp__conductor__AskUserQuestion` with:
+4. Call `AskUserQuestion` with:
    - question: "Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests."
    - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
@@ -83,7 +83,7 @@ Spawn the `test-case-generator` subagent with the following task:
 1. Verify `autonoma/qa-tests/INDEX.md` exists and is non-empty
 2. The PostToolUse hook will have validated the INDEX frontmatter and individual test file frontmatter
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
-4. Call `mcp__conductor__AskUserQuestion` with:
+4. Call `AskUserQuestion` with:
    - question: "Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app."
    - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
