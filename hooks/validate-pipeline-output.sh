@@ -73,4 +73,15 @@ if [ $EXIT_CODE -ne 0 ] || [ "$RESULT" != "OK" ]; then
   exit 2
 fi
 
+# For INDEX.md, also validate directory structure
+if [ "$VALIDATOR_NAME" = "validate-test-index" ]; then
+  DIR_SCRIPT="$VALIDATORS_DIR/validate_directory_structure.py"
+  DIR_RESULT=$(python3 "$DIR_SCRIPT" "$FILE_PATH" 2>&1)
+  DIR_EXIT=$?
+  if [ $DIR_EXIT -ne 0 ] || [ "$DIR_RESULT" != "OK" ]; then
+    echo "VALIDATION FAILED [validate-directory-structure]: $DIR_RESULT" >&2
+    exit 2
+  fi
+fi
+
 exit 0
