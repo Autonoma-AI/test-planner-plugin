@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validates individual test file frontmatter format."""
 import sys
+import os
 import yaml
 
 filepath = sys.argv[1]
@@ -40,10 +41,39 @@ if crit not in valid_criticality:
     sys.exit(1)
 
 # Validate string fields are non-empty
-for field in ['title', 'description', 'scenario', 'flow']:
+for field in ['title', 'description', 'flow']:
     val = fm.get(field)
     if not isinstance(val, str) or len(val.strip()) == 0:
         print(f'{field} must be a non-empty string')
+        sys.exit(1)
+
+# Validate scenario is an object with name and description
+scenario = fm.get('scenario')
+if not isinstance(scenario, dict):
+    print('scenario must be a mapping with "name" and "description" fields')
+    sys.exit(1)
+
+for field in ['name', 'description']:
+    val = scenario.get(field)
+    if not isinstance(val, str) or not val.strip():
+        print(f'scenario.{field} must be a non-empty string')
+        sys.exit(1)
+
+scenario_name = scenario['name']
+
+# Cross-check: scenario file must exist in autonoma/scenarios/
+path = os.path.abspath(filepath)
+autonoma_dir = None
+path_parts = path.split(os.sep)
+for i in range(len(path_parts) - 1, -1, -1):
+    if path_parts[i] == 'autonoma':
+        autonoma_dir = os.sep.join(path_parts[:i + 1])
+        break
+
+if autonoma_dir:
+    scenario_file = os.path.join(autonoma_dir, 'scenarios', f'{scenario_name}.md')
+    if not os.path.isfile(scenario_file):
+        print(f'scenario "{scenario_name}" not found: expected file at autonoma/scenarios/{scenario_name}.md')
         sys.exit(1)
 
 print('OK')

@@ -147,6 +147,24 @@ The validation checks:
 - `feature_count` and `skill_count` are positive integers
 - `app_description` is at least 20 characters
 
+## CRITICAL: Skill File Format
+
+Each skill file in `autonoma/skills/` MUST start with YAML frontmatter containing at least `name` and `description`:
+
+```yaml
+---
+name: "Skill Name"
+description: "What this skill covers — one or two sentences."
+---
+```
+
+### Skill File Rules
+
+- **name**: Non-empty string — the skill's human-readable name
+- **description**: Non-empty string — what the skill covers
+
+The rest of the file contains the skill content as described in the fetched instructions.
+
 ## Important
 
 - Use subagents for parallel exploration of the codebase

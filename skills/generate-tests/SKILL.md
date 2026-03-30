@@ -15,26 +15,17 @@ Do NOT skip steps. Do NOT proceed if validation fails.
 
 ## CRITICAL: User Confirmation Between Steps
 
-<<<<<<< tomaspiaggio/features-json
-After each step (1, 2, and 3), you MUST present the summary and then ask the user for
-confirmation using the `AskUserQuestion` tool. This creates an interactive
-UI prompt that makes it clear the user needs to respond before the pipeline continues.
-
-After calling `AskUserQuestion`, wait for the user's response.
-Only proceed to the next step after they confirm.
-=======
 After each step (1, 2, and 3), you MUST stop and wait for the user to respond before proceeding.
 This means: present the summary, ask the confirmation question, and then **end your turn**.
 Do NOT call any more tools. Do NOT spawn the next subagent. Do NOT continue with any work.
 Your message must END with the confirmation question. The user's next message is their answer.
 Only after the user explicitly confirms should you proceed to the next step.
->>>>>>> main
 
 ## Before Starting
 
-Create the output directory:
+Create the output directories:
 ```bash
-mkdir -p autonoma/skills autonoma/qa-tests
+mkdir -p autonoma/skills autonoma/scenarios autonoma/qa-tests
 ```
 
 ## Step 1: Generate Knowledge Base
@@ -52,75 +43,56 @@ Spawn the `kb-generator` subagent with the following task:
 1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
 2. The PostToolUse hook will have validated the frontmatter and features.json schema automatically
 3. Read the file and present the frontmatter to the user — specifically the core_flows table
-<<<<<<< tomaspiaggio/features-json
-4. Call `AskUserQuestion` with:
-   - question: "Does this core flows table look correct? These flows determine how the test budget is distributed."
-   - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
-=======
 4. End your message with exactly this question: **"Does this core flows table look correct? These flows determine how the test budget is distributed. Please confirm or suggest changes before I proceed to Step 2."**
 5. **STOP. End your turn. Do NOT call any tools or spawn any agents. Wait for the user to reply.**
->>>>>>> main
 
 ## Step 2: Generate Scenarios
 
 Spawn the `scenario-generator` subagent with the following task:
 
 > Read the knowledge base from `autonoma/AUTONOMA.md` and `autonoma/skills/`.
-> Generate test data scenarios. Write the output to `autonoma/scenarios.md`.
-> The file MUST have YAML frontmatter with scenario_count, scenarios summary, and entity_types.
+> Generate test data scenarios. Write the output to `autonoma/scenarios/` as a folder containing
+> `INDEX.md` and one file per scenario (standard.md, empty.md, large.md).
+> The INDEX.md MUST have YAML frontmatter with scenario_count, scenarios list, entity_types, and relationships.
+> Each scenario file MUST have YAML frontmatter with name, description, entity_types, total_entities.
 > Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-2-scenarios.txt first.
 
 **After the subagent completes:**
-1. Verify `autonoma/scenarios.md` exists and is non-empty
+1. Verify `autonoma/scenarios/INDEX.md` exists and is non-empty
 2. The PostToolUse hook will have validated the frontmatter format automatically
-3. Read the file and present the frontmatter summary to the user — scenario names, entity counts, entity types
-<<<<<<< tomaspiaggio/features-json
-4. Call `AskUserQuestion` with:
-   - question: "Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests."
-   - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
-=======
+3. Read INDEX.md and present the frontmatter summary to the user — scenario names, entity counts, entity types, relationships
 4. End your message with exactly this question: **"Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests. Please confirm or suggest changes before I proceed to Step 3."**
 5. **STOP. End your turn. Do NOT call any tools or spawn any agents. Wait for the user to reply.**
->>>>>>> main
 
 ## Step 3: Generate E2E Test Cases
 
 Spawn the `test-case-generator` subagent with the following task:
 
 > Read the knowledge base from `autonoma/AUTONOMA.md`, skills from `autonoma/skills/`,
-> and scenarios from `autonoma/scenarios.md`.
+> and scenarios from `autonoma/scenarios/` (INDEX.md + individual scenario files).
 > Generate complete E2E test cases as markdown files in `autonoma/qa-tests/`.
 > You MUST create `autonoma/qa-tests/INDEX.md` with frontmatter containing total_tests,
 > total_folders, folder breakdown, and coverage_correlation.
-> Each test file MUST have frontmatter with title, description, criticality, scenario, and flow.
+> Each test file MUST have frontmatter with title, description, criticality, scenario (object with name and description), and flow.
 > Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-3-e2e-tests.txt first.
 
 **After the subagent completes:**
 1. Verify `autonoma/qa-tests/INDEX.md` exists and is non-empty
 2. The PostToolUse hook will have validated the INDEX frontmatter and individual test file frontmatter
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
-<<<<<<< tomaspiaggio/features-json
-4. Call `AskUserQuestion` with:
-   - question: "Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app."
-   - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
-=======
 4. End your message with exactly this question: **"Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app. Please confirm or suggest changes before I proceed to Step 4."**
 5. **STOP. End your turn. Do NOT call any tools or spawn any agents. Wait for the user to reply.**
->>>>>>> main
 
 ## Step 4: Implement Environment Factory
 
 Spawn the `env-factory-generator` subagent with the following task:
 
-> Read the scenarios from `autonoma/scenarios.md` and implement the Autonoma Environment Factory
-> endpoint in the project's backend. The endpoint handles discover/up/down actions.
+> Read the scenarios from `autonoma/scenarios/` (INDEX.md + individual scenario files) and implement
+> the Autonoma Environment Factory endpoint in the project's backend. The endpoint handles discover/up/down actions.
 > Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-4-implement-scenarios.txt
 > and https://docs.agent.autonoma.app/llms/guides/environment-factory.txt first.
 > After implementing, run integration tests to verify the endpoint works.
-> Use AUTONOMA_SIGNING_SECRET and AUTONOMA_JWT_SECRET as environment variable names.
+> Use AUTONOMA_SHARED_SECRET and AUTONOMA_SIGNING_SECRET as environment variable names.
 
 **After the subagent completes:**
 1. Verify the endpoint was created and tests pass

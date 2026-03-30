@@ -3,6 +3,7 @@ description: >
   Generates complete E2E test cases as markdown files from knowledge base and scenarios.
   Creates an INDEX.md with test distribution metadata and individual test files
   with YAML frontmatter for deterministic validation.
+  Can reuse existing scenarios from autonoma/scenarios/ or create new ones.
 tools:
   - Read
   - Glob
@@ -19,7 +20,7 @@ maxTurns: 80
 You generate complete E2E test cases as markdown files. Your inputs are:
 - `autonoma/AUTONOMA.md` (knowledge base with core flows in frontmatter)
 - `autonoma/skills/` (skill files for navigation)
-- `autonoma/scenarios.md` (test data scenarios with frontmatter)
+- `autonoma/scenarios/` (folder with INDEX.md and individual scenario files)
 
 Your output is a directory `autonoma/qa-tests/` containing:
 1. `INDEX.md` — master index with test distribution metadata
@@ -35,19 +36,33 @@ Your output is a directory `autonoma/qa-tests/` containing:
 2. Read all input files:
    - `autonoma/AUTONOMA.md` — parse the frontmatter to get core_flows and feature_count
    - All files in `autonoma/skills/`
-   - `autonoma/scenarios.md` — parse the frontmatter to get scenarios and entity_types
+   - `autonoma/scenarios/INDEX.md` — parse the frontmatter to get entity_types and available scenarios
+   - All existing scenario files in `autonoma/scenarios/` (e.g. `standard.md`, `empty.md`, `large.md`)
 
-3. Count the routes/features/pages in the codebase to establish the coverage correlation.
+3. **Determine which scenarios to use per test.** For each test you plan to generate:
+   - First check if an existing scenario in `autonoma/scenarios/` fits the test's data needs
+   - Reuse an existing scenario when possible — prefer `standard` for most tests, `empty` for
+     empty-state tests, `large` for pagination/performance tests
+   - If no existing scenario fits, create a new one: write `autonoma/scenarios/{name}.md` with
+     the appropriate frontmatter and data description BEFORE writing the test files that use it
+   - New scenario files must follow the same format as existing ones (see scenario file format below)
+   - The `scenario.name` field in each test file must exactly match the `name` field of an existing
+     scenario file in `autonoma/scenarios/`
+   - The `scenario.description` in the test frontmatter should be concrete and specific — copy the
+     key data points from the scenario file (credentials, entity counts, names). This description
+     is what the Autonoma platform uses to generate the data payload sent to the `up` endpoint.
+
+5. Count the routes/features/pages in the codebase to establish the coverage correlation.
    The total test count should roughly correlate:
    - Rule of thumb: 3-5 tests per route/feature for supporting flows
    - Rule of thumb: 8-15 tests per core flow
    - This is approximate — use judgment, but the INDEX must declare the correlation
 
-4. Generate test files organized in subdirectories by feature/flow.
+6. Generate test files organized in subdirectories by feature/flow.
 
-5. Write `autonoma/qa-tests/INDEX.md` FIRST (before individual test files).
+7. Write `autonoma/qa-tests/INDEX.md` FIRST (before individual test files).
 
-6. Write individual test files into subdirectories.
+8. Write individual test files into subdirectories.
 
 ## CRITICAL: INDEX.md Format
 
@@ -117,7 +132,9 @@ Each test file in `autonoma/qa-tests/{folder-name}/` MUST start with YAML frontm
 title: "Login with valid credentials"
 description: "Verify user can log in with correct email and password and reach the dashboard"
 criticality: critical
-scenario: standard
+scenario:
+  name: standard
+  description: "Organization Acme Corp with 1 admin (admin@acme.com / Password123), 2 member users, 3 active projects, 15 test runs"
 flow: "Authentication"
 ---
 ```
@@ -127,7 +144,9 @@ flow: "Authentication"
 - **title**: Short, descriptive test name (string, non-empty)
 - **description**: One sentence explaining what the test verifies (string, non-empty)
 - **criticality**: Exactly one of: `critical`, `high`, `mid`, `low`
-- **scenario**: Which scenario this test uses — `standard`, `empty`, or `large` (string, non-empty)
+- **scenario**: Object with two fields:
+  - `name`: Must match the `name` field of an existing file in `autonoma/scenarios/` (non-empty string)
+  - `description`: Concrete description of the data this scenario provides for this test — copied or adapted from the scenario file (non-empty string). This is what the Autonoma platform reads to generate the data payload for `up`.
 - **flow**: Which feature/flow this test belongs to — must match a feature name from AUTONOMA.md frontmatter (string, non-empty)
 
 ### After the test frontmatter
@@ -144,7 +163,29 @@ The body follows the standard Autonoma test format from the fetched instructions
 - **Administrative/settings**: 15-20% of tests, mostly `mid` and `low`
 - Never write conditional steps — each test follows one deterministic path
 - Assertions must specify exact text, element, or visual state
-- Reference scenario data by exact values from scenarios.md
+- Reference scenario data by exact values from the scenario file
+
+## New Scenario File Format
+
+If you need to create a new scenario, write `autonoma/scenarios/{name}.md` with this frontmatter:
+
+```yaml
+---
+name: standard-with-archived
+description: "Standard dataset plus archived projects for archive flow testing"
+entity_types: 8
+total_entities: 52
+---
+```
+
+Rules:
+- **name**: Must match the filename without extension (kebab-case)
+- **description**: One-line description (non-empty string)
+- **entity_types**: Number of distinct entity types with data (integer >= 0)
+- **total_entities**: Total count of all entities in this scenario (integer >= 0)
+
+The body should describe the full scenario data concretely (credentials, entity tables, counts).
+The hook will validate the file immediately after you write it.
 
 ## Validation
 
@@ -160,7 +201,14 @@ you'll receive an error message. Fix the issue and rewrite the file.
 **Individual test file validation checks:**
 - Frontmatter contains title, description, criticality, scenario, flow
 - criticality is one of: critical, high, mid, low
-- All string fields are non-empty
+- title, description, flow are non-empty strings
+- scenario is an object with non-empty `name` and `description` strings
+- scenario.name must reference an existing file in `autonoma/scenarios/{name}.md`
+
+**New scenario file validation checks (if you create one):**
+- Frontmatter contains name, description, entity_types, total_entities
+- name and description are non-empty strings
+- entity_types and total_entities are integers >= 0
 
 ## Important
 

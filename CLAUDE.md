@@ -33,6 +33,7 @@ Validators are in `hooks/validators/`. They parse YAML frontmatter and check req
 |-----------|-------------|------------|
 | `validate_kb.py` | `*/autonoma/AUTONOMA.md` | app_name, app_description (≥20 chars), core_flows with at least one `core: true` |
 | `validate_features.py` | `*/autonoma/features.json` | features array length matches total_features, valid types, at least one core feature |
+| `validate_skill_file.py` | `*/autonoma/skills/*.md` | name (non-empty string), description (non-empty string) |
 | `validate_scenarios.py` | `*/autonoma/scenarios.md` | scenario_count ≥ 3, standard/empty/large scenarios present, entity_types |
 | `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | test totals match folder sums, criticality sums, cross-checks against features.json |
 | `validate_test_file.py` | `*/autonoma/qa-tests/*/[!I]*.md` | title, description, criticality (critical/high/mid/low), scenario, flow |

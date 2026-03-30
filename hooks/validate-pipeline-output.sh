@@ -29,9 +29,17 @@ case "$FILE_PATH" in
     VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_features.py"
     VALIDATOR_NAME="validate-features"
     ;;
-  */autonoma/scenarios.md)
-    VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_scenarios.py"
-    VALIDATOR_NAME="validate-scenarios"
+  */autonoma/scenarios/INDEX.md)
+    VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_scenarios_index.py"
+    VALIDATOR_NAME="validate-scenarios-index"
+    ;;
+  */autonoma/scenarios/[!I]*.md)
+    VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_scenario_file.py"
+    VALIDATOR_NAME="validate-scenario-file"
+    ;;
+  */autonoma/skills/*.md)
+    VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_skill_file.py"
+    VALIDATOR_NAME="validate-skill-file"
     ;;
   */autonoma/qa-tests/INDEX.md)
     VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_test_index.py"
