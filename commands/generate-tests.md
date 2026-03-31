@@ -36,12 +36,14 @@ Read the environment variables. These are required for reporting progress back t
 - `AUTONOMA_PROJECT_ID` — your Autonoma project ID
 - `AUTONOMA_API_URL` — Autonoma API base URL
 
+Before creating the record, derive a clean human-readable application name from the repository. Look at the git remote URL, the directory name, and any `package.json` / `pyproject.toml` / `README.md` to infer what the product is actually called. Prefer the product name over the repo slug (e.g. "My App" not "my-app-v2-final"). Store it in `APP_NAME`.
+
 Create the generation record so the dashboard can track progress in real time:
 ```bash
 RESPONSE=$(curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "{\"applicationId\":\"${AUTONOMA_PROJECT_ID}\"}" 2>/dev/null || echo '{}')
+  -d "{\"applicationId\":\"${AUTONOMA_PROJECT_ID}\",\"repoName\":\"${APP_NAME}\"}" 2>/dev/null || echo '{}')
 GENERATION_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo '')
 mkdir -p autonoma
 echo "$GENERATION_ID" > autonoma/.generation-id
