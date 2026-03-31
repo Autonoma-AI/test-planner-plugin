@@ -38,7 +38,7 @@ Read the environment variables. These are required for reporting progress back t
 
 Create the generation record so the dashboard can track progress in real time:
 ```bash
-RESPONSE=$(curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations" \
+RESPONSE=$(curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"applicationId\":\"${AUTONOMA_PROJECT_ID}\"}" 2>/dev/null || echo '{}')
@@ -57,11 +57,11 @@ Report step start:
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.started","data":{"step":0,"name":"Knowledge Base"}}' || true
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Analyzing codebase structure and identifying features..."}}' || true
@@ -87,12 +87,12 @@ AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 SKILL_COUNT=$(ls "$AUTONOMA_ROOT/autonoma/skills/"*.md 2>/dev/null | wc -l | tr -d ' ')
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"type\":\"log\",\"data\":{\"message\":\"Knowledge base complete. Generated ${SKILL_COUNT} skills. Uploading to dashboard...\"}}" || true
 
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.completed","data":{"step":0,"name":"Knowledge Base"}}' || true
@@ -108,7 +108,7 @@ if os.path.isdir(d):
             with open(os.path.join(d, f)) as fh:
                 skills.append({'name': f, 'content': fh.read()})
 print(json.dumps({'skills': skills}))
-" | curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/artifacts" \
+" | curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/artifacts" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d @- || true
@@ -126,11 +126,11 @@ Report step start:
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.started","data":{"step":1,"name":"Scenarios"}}' || true
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Mapping data model and designing test data environments..."}}' || true
@@ -153,11 +153,11 @@ Report step complete:
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Scenarios generated. 3 test data environments defined (standard, empty, large)."}}' || true
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.completed","data":{"step":1,"name":"Scenarios"}}' || true
@@ -175,11 +175,11 @@ Report step start:
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.started","data":{"step":2,"name":"E2E Tests"}}' || true
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Generating E2E test cases from knowledge base and scenarios..."}}' || true
@@ -206,12 +206,12 @@ AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 TEST_COUNT=$(find "$AUTONOMA_ROOT/autonoma/qa-tests" -name '*.md' ! -name 'INDEX.md' 2>/dev/null | wc -l | tr -d ' ')
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"type\":\"log\",\"data\":{\"message\":\"Generated ${TEST_COUNT} test cases. Uploading to dashboard...\"}}" || true
 
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.completed","data":{"step":2,"name":"E2E Tests"}}' || true
@@ -233,7 +233,7 @@ for root, dirs, files in os.walk(qa_dir):
                 entry['folder'] = folder
             test_cases.append(entry)
 print(json.dumps({'testCases': test_cases}))
-" | curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/artifacts" \
+" | curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/artifacts" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d @- || true
@@ -251,11 +251,11 @@ Report step start:
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.started","data":{"step":3,"name":"Environment Factory"}}' || true
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Implementing Environment Factory endpoint in your backend..."}}' || true
@@ -280,11 +280,11 @@ Report step complete:
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Environment Factory implemented and verified."}}' || true
-[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.completed","data":{"step":3,"name":"Environment Factory"}}' || true
