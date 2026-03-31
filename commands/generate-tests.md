@@ -40,17 +40,20 @@ Before creating the record, derive a clean human-readable application name from 
 
 Create the generation record so the dashboard can track progress in real time:
 ```bash
-RESPONSE=$(curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups" \
+RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "${AUTONOMA_API_URL}/v1/setup/setups" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "{\"applicationId\":\"${AUTONOMA_PROJECT_ID}\",\"repoName\":\"${APP_NAME}\"}" 2>/dev/null || echo '{}')
-GENERATION_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo '')
+  -d "{\"applicationId\":\"${AUTONOMA_PROJECT_ID}\",\"repoName\":\"${APP_NAME}\"}")
+HTTP_STATUS=$(echo "$RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
+BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+echo "Setup API response (HTTP $HTTP_STATUS): $BODY"
+GENERATION_ID=$(echo "$BODY" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo '')
 mkdir -p autonoma
 echo "$GENERATION_ID" > autonoma/.generation-id
 echo "Generation ID: $GENERATION_ID"
 ```
 
-If `GENERATION_ID` is empty, continue anyway — reporting is best-effort and must never block test generation.
+If `GENERATION_ID` is empty, log the HTTP status and response body above for debugging, then continue anyway — reporting is best-effort and must never block test generation.
 
 ## Step 1: Generate Knowledge Base
 
