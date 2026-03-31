@@ -1,38 +1,32 @@
-# Local Development Setup
+# Development Setup
 
-This guide explains how to install the plugin locally from source so you can test changes without publishing to the marketplace.
+This guide explains how to test changes from a branch without publishing to the marketplace.
 
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) installed
-- The branch cloned locally
+- Your branch pushed to GitHub
 
-## Install
+## Install from a branch
 
-Copy the command file to your Claude commands directory:
-
-```bash
-cp ~/repos/test-planner-plugin/commands/generate-tests.md ~/.claude/commands/autonoma-generate-tests.md
-```
-
-That's it. Claude Code picks up any file in `~/.claude/commands/` automatically - no restart needed.
-
-## Verify
-
-Open any project in Claude Code and run:
+Remove any existing installation, then add the marketplace pointing to your branch:
 
 ```
-/autonoma-generate-tests
+/plugin uninstall autonoma-test-planner
+/plugin marketplace remove autonoma
+/plugin marketplace add https://github.com/Autonoma-AI/test-planner-plugin#your-branch-name
+/plugin install autonoma-test-planner@autonoma
 ```
-
-You should see the command in the autocomplete list.
 
 ## Updating after changes
 
-The `~/.claude/commands/` file is a static copy - it does not sync automatically. After pulling new changes or editing the source, re-run the copy command:
+Push new commits to your branch, then reinstall:
 
-```bash
-cp ~/repos/test-planner-plugin/commands/generate-tests.md ~/.claude/commands/autonoma-generate-tests.md
+```
+/plugin uninstall autonoma-test-planner
+/plugin marketplace remove autonoma
+/plugin marketplace add https://github.com/Autonoma-AI/test-planner-plugin#your-branch-name
+/plugin install autonoma-test-planner@autonoma
 ```
 
 ## Environment variables
@@ -47,6 +41,6 @@ The plugin requires three environment variables to be set in the project where y
 
 Add them to the `.env` file or export them in your shell before running Claude Code in the target project.
 
-## How the naming works
+## References
 
-The file `~/.claude/commands/autonoma-generate-tests.md` is invoked as `/autonoma-generate-tests`. The marketplace install uses the namespace `autonoma-test-planner:generate-tests`, but for local development the flat name is sufficient.
+- [Claude Code — Discover and install plugins](https://code.claude.com/docs/en/discover-plugins#add-from-github)
