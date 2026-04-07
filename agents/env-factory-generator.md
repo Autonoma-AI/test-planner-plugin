@@ -101,6 +101,17 @@ so `JSON.stringify(a) !== JSON.stringify(b)` even when the objects are equivalen
 Correct approach: decode `refsToken` with `AUTONOMA_JWT_SECRET`, then use the decoded `refs` directly
 for deletion. Ignore the `refs` field from the request body entirely — the JWT is the source of truth.
 
+### CRITICAL: Response Shapes
+
+The Autonoma platform validates responses with strict Zod schemas. Using wrong field names
+causes validation failures. The correct response shapes are:
+
+- **discover**: `{ "environments": [...] }` — NOT `scenarios`, NOT `data`, NOT any other key
+- **up**: `{ "auth": {...}, "refs": {...}, "refsToken": "...", "metadata": {...} }`
+- **down**: `{ "ok": true }` — NOT `{ "success": true }`, NOT any other key
+
+These are non-negotiable. A `down` handler returning `{ success: true }` will fail validation.
+
 ### Creation and Teardown Order
 
 - **Up**: Create parent entities before children (org → users → projects → tests → runs)
@@ -190,3 +201,13 @@ After implementation, explain:
 - Handle circular foreign keys with transaction-wrapped deletion
 - Always use `testRunId` to make unique fields (emails, org names) to prevent parallel test collisions
 - Test the FULL lifecycle (discover → up → down) within the session
+
+### Post-implementation
+
+After creating the endpoint, write the endpoint path to `autonoma/.webhook-path` so the pipeline can report it:
+
+```bash
+echo "/api/autonoma" > autonoma/.webhook-path
+```
+
+Replace `/api/autonoma` with the actual path where you created the endpoint.

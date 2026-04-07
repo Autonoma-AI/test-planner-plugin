@@ -88,7 +88,10 @@ print(json.dumps({'skills': skills}))
   -d @- 2>/dev/null || true
 ```
 
-4. Proceed immediately to Step 2.
+4. Call AskUserQuestion with:
+   - question: "Does this core flows table look correct? These flows determine how the test budget is distributed."
+   - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
+   Wait for the user's response before proceeding.
 
 ## Step 2: Generate Scenarios
 
@@ -122,7 +125,10 @@ GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
   -d '{"type":"step.completed","data":{"step":1,"name":"Scenarios"}}' 2>/dev/null || true
 ```
 
-4. Proceed immediately to Step 3.
+4. Call AskUserQuestion with:
+   - question: "Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests."
+   - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
+   Wait for the user's response before proceeding.
 
 ## Step 3: Generate E2E Test Cases
 
@@ -179,7 +185,10 @@ print(json.dumps({'testCases': test_cases}))
   -d @- 2>/dev/null || true
 ```
 
-4. Proceed immediately to Step 4.
+4. Call AskUserQuestion with:
+   - question: "Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app."
+   - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
+   Wait for the user's response before proceeding.
 
 ## Step 4: Implement Environment Factory
 
@@ -216,7 +225,7 @@ GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
 [ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"env_factory.configured","data":{}}' 2>/dev/null || true
+  -d "{\"type\":\"env_factory.configured\",\"data\":{\"webhookPath\":\"$(cat autonoma/.webhook-path 2>/dev/null || echo '/api/autonoma')\"}}" 2>/dev/null || true
 ```
 
 ## Completion

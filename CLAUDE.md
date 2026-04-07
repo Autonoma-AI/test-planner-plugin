@@ -23,7 +23,7 @@ hooks/
 
 Each step spawns an isolated subagent. After each Write, the PostToolUse hook in `hooks/hooks.json` runs `validate-pipeline-output.sh`, which pattern-matches the file path and runs the appropriate Python validator. Validators exit 0 (OK) or 2 (block with error message).
 
-Steps auto-advance — no inter-step confirmation prompts. Step 4 is the final step.
+Steps 1-3 require user confirmation before advancing. Step 4 is the final step (no gate).
 
 ## Validation
 
