@@ -283,6 +283,17 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 
 ## Completion
 
+Report the entire setup as finished so the dashboard transitions to the next page:
+```bash
+AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
+GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
+echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"setup.completed","data":{}}' || true
+```
+
 After all steps complete, summarize:
 - **Step 1**: Knowledge base location and core flow count
 - **Step 2**: Scenario count and entity types covered
