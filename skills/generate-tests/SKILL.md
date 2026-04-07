@@ -13,15 +13,6 @@ You are orchestrating a 4-step test generation pipeline. Each step runs as an is
 **Every step MUST complete successfully and pass validation before the next step begins.**
 Do NOT skip steps. Do NOT proceed if validation fails.
 
-## CRITICAL: User Confirmation Between Steps
-
-After each step (1, 2, and 3), you MUST present the summary and then ask the user for
-confirmation using the `AskUserQuestion` tool. This creates an interactive
-UI prompt that makes it clear the user needs to respond before the pipeline continues.
-
-After calling `AskUserQuestion`, wait for the user's response.
-Only proceed to the next step after they confirm.
-
 ## Before Starting
 
 Create the output directory:
@@ -97,10 +88,7 @@ print(json.dumps({'skills': skills}))
   -d @- 2>/dev/null || true
 ```
 
-4. Call `AskUserQuestion` with:
-   - question: "Does this core flows table look correct? These flows determine how the test budget is distributed."
-   - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
+4. Proceed immediately to Step 2.
 
 ## Step 2: Generate Scenarios
 
@@ -134,10 +122,7 @@ GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
   -d '{"type":"step.completed","data":{"step":1,"name":"Scenarios"}}' 2>/dev/null || true
 ```
 
-4. Call `AskUserQuestion` with:
-   - question: "Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests."
-   - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
+4. Proceed immediately to Step 3.
 
 ## Step 3: Generate E2E Test Cases
 
@@ -194,10 +179,7 @@ print(json.dumps({'testCases': test_cases}))
   -d @- 2>/dev/null || true
 ```
 
-4. Call `AskUserQuestion` with:
-   - question: "Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app."
-   - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
+4. Proceed immediately to Step 4.
 
 ## Step 4: Implement Environment Factory
 
@@ -224,13 +206,17 @@ Spawn the `env-factory-generator` subagent with the following task:
 2. Present the results to the user — what was implemented, where, test results
 3. Report any issues that need manual attention
 
-Report step complete:
+Report step complete and notify the UI that the environment factory is configured:
 ```bash
 GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
 [ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"type":"step.completed","data":{"step":3,"name":"Environment Factory"}}' 2>/dev/null || true
+[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"env_factory.configured","data":{}}' 2>/dev/null || true
 ```
 
 ## Completion

@@ -92,6 +92,15 @@ Always use these exact names:
 2. **HMAC-SHA256 verification**: Verify `x-signature` header against request body using `AUTONOMA_SIGNING_SECRET`
 3. **Signed refs (JWT)**: Sign refs in `up` response, verify in `down` request using `AUTONOMA_JWT_SECRET`
 
+### CRITICAL: Refs Comparison in DOWN Handler
+
+In the `down` handler, you MUST use the decoded JWT payload as the authoritative refs — do NOT compare
+the request `refs` against the JWT payload using `JSON.stringify()`. Key ordering is not guaranteed,
+so `JSON.stringify(a) !== JSON.stringify(b)` even when the objects are equivalent.
+
+Correct approach: decode `refsToken` with `AUTONOMA_JWT_SECRET`, then use the decoded `refs` directly
+for deletion. Ignore the `refs` field from the request body entirely — the JWT is the source of truth.
+
 ### Creation and Teardown Order
 
 - **Up**: Create parent entities before children (org → users → projects → tests → runs)

@@ -23,7 +23,7 @@ hooks/
 
 Each step spawns an isolated subagent. After each Write, the PostToolUse hook in `hooks/hooks.json` runs `validate-pipeline-output.sh`, which pattern-matches the file path and runs the appropriate Python validator. Validators exit 0 (OK) or 2 (block with error message).
 
-Steps 1-3 require user confirmation before advancing. Step 4 is the final step (no gate).
+Steps auto-advance — no inter-step confirmation prompts. Step 4 is the final step.
 
 ## Validation
 
@@ -51,6 +51,3 @@ claude plugin validate ./
 
 - Python 3 + PyYAML (auto-installed by the hook if missing)
 
-## Known Issues
-
-- `commands/generate-tests.md` has unresolved merge conflicts between the AskUserQuestion approach and the end-turn approach for user confirmation between steps. Resolve before merging to main.
