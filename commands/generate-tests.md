@@ -13,6 +13,15 @@ You are orchestrating a 4-step test generation pipeline. Each step runs as an is
 **Every step MUST complete successfully and pass validation before the next step begins.**
 Do NOT skip steps. Do NOT proceed if validation fails.
 
+## CRITICAL: User Confirmation Between StepsExpand commentComment on line L16
+
+After each step (1, 2, and 3), you MUST present the summary and then ask the user for
+confirmation using the `AskUserQuestion` tool. This creates an interactive
+UI prompt that makes it clear the user needs to respond before the pipeline continues.
+
+After calling `AskUserQuestion`, wait for the user's response.
+Only proceed to the next step after they confirm.
+
 ## Before Starting
 
 Create the output directory and save the project root (subagents change working directory, so we need an absolute path reference):
