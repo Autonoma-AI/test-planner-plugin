@@ -13,7 +13,7 @@ You are orchestrating a 4-step test generation pipeline. Each step runs as an is
 **Every step MUST complete successfully and pass validation before the next step begins.**
 Do NOT skip steps. Do NOT proceed if validation fails.
 
-## CRITICAL: User Confirmation Between StepsExpand commentComment on line L16
+## CRITICAL: User Confirmation Between Steps
 
 After each step (1, 2, and 3), you MUST present the summary and then ask the user for
 confirmation using the `AskUserQuestion` tool. This creates an interactive
