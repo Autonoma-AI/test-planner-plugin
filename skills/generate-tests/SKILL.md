@@ -360,6 +360,36 @@ if [ -n "$GENERATION_ID" ]; then
     echo "ERROR: Recipe upload failed (HTTP $UPLOAD_STATUS). Step 4 cannot complete."
     exit 1
   fi
+
+  # Verify recipes were persisted by fetching them back from the dashboard
+  VERIFY_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X GET "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/scenarios" \
+    -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
+  VERIFY_STATUS=$(echo "$VERIFY_RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
+  VERIFY_BODY=$(echo "$VERIFY_RESPONSE" | sed '/HTTP_STATUS:/d')
+  if [ "$VERIFY_STATUS" != "200" ]; then
+    echo "ERROR: Failed to verify scenarios (HTTP $VERIFY_STATUS). Step 4 cannot complete."
+    exit 1
+  fi
+  # Extract scenario names from the uploaded recipes file and verify each one exists with an active recipe
+  EXPECTED_NAMES=$(python3 -c "import json; data=json.load(open('$RECIPE_PATH')); print('\n'.join(r['name'] for r in data['recipes']))")
+  MISSING=""
+  for NAME in $EXPECTED_NAMES; do
+    HAS_ACTIVE=$(echo "$VERIFY_BODY" | python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+match = [s for s in data.get('scenarios', []) if s['name'] == '$NAME' and s.get('hasActiveRecipe')]
+print('yes' if match else 'no')
+" 2>/dev/null || echo "no")
+    if [ "$HAS_ACTIVE" != "yes" ]; then
+      MISSING="$MISSING $NAME"
+    fi
+  done
+  if [ -n "$MISSING" ]; then
+    echo "ERROR: The following scenarios are missing or lack an active recipe on the dashboard:$MISSING"
+    echo "Step 4 cannot complete. Recipe upload may have partially failed."
+    exit 1
+  fi
+  echo "Verified: all scenario recipes persisted successfully on the dashboard."
 fi
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
