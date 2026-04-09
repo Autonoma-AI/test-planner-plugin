@@ -55,6 +55,10 @@ You generate test data scenarios from a knowledge base. Your inputs are `autonom
    - the value is inherently time-based, unstable, or nondeterministic
    - hardcoding it would make later tests misleading or brittle
 
+   Fields that are time-sensitive (dates, deadlines, timestamps) or have any uniqueness/format
+   constraint enforced by the database or application **must** be variable — hardcoding them
+   will cause test failures when the hardcoded value expires or collides.
+
    Do not mark a field as variable just because:
    - it is user-facing text
    - it could be unique in theory
