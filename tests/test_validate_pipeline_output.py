@@ -64,6 +64,38 @@ VALID_RECIPES = {
 }
 
 
+def test_sdk_endpoint_hook_accepts_valid_url():
+    env = os.environ.copy()
+
+    code, out, err = _run_hook(
+        {
+            'autonoma/.sdk-endpoint': 'http://127.0.0.1:3000/api/autonoma\n',
+        },
+        'autonoma/.sdk-endpoint',
+        env,
+    )
+
+    assert code == 0
+    assert out == ''
+    assert err == ''
+
+
+def test_sdk_endpoint_hook_blocks_invalid_url():
+    env = os.environ.copy()
+
+    code, _, err = _run_hook(
+        {
+            'autonoma/.sdk-endpoint': '/api/autonoma\n',
+        },
+        'autonoma/.sdk-endpoint',
+        env,
+    )
+
+    assert code == 2
+    assert 'validate-sdk-endpoint' in err
+    assert 'http or https' in err
+
+
 def _run_hook(files: dict[str, str], target: str, env: dict[str, str]) -> tuple[int, str, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
         for relpath, content in files.items():

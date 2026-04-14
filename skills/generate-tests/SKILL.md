@@ -9,46 +9,74 @@ description: >
 
 # Autonoma E2E Test Generation Pipeline
 
-You are orchestrating a 4-step test generation pipeline. Each step runs as an isolated subagent.
+You are orchestrating a 5-step test generation pipeline. Each step runs as an isolated subagent.
 **Every step MUST complete successfully and pass validation before the next step begins.**
 Do NOT skip steps. Do NOT proceed if validation fails.
 
 ## User Confirmation Between Steps
 
-By default, after each step (1, 2, and 3), you MUST present the summary and then ask the user for
-confirmation using the `AskUserQuestion` tool. This creates an interactive
-UI prompt that makes it clear the user needs to respond before the pipeline continues.
+By default, after each step (1, 2, 3, and 4), present the summary and automatically proceed to the
+next step once validation passes.
+
+**Manual confirmation mode:** If the environment variable `AUTONOMA_REQUIRE_CONFIRMATION` is set to
+`true`, you MUST present the summary and then ask the user for confirmation using the
+`AskUserQuestion` tool.
 
 After calling `AskUserQuestion`, wait for the user's response.
 Only proceed to the next step after they confirm.
 
-**Auto-advance mode:** If the environment variable `AUTONOMA_AUTO_ADVANCE` is set to `true`,
-skip the `AskUserQuestion` calls and automatically proceed to the next step after presenting
-the summary. The summaries are still displayed — only the confirmation prompt is skipped.
-
 ## Before Starting
 
-Create the output directory and save the project root (subagents change working directory, so we need an absolute path reference):
+Create the output directory and save the project root:
+
 ```bash
 AUTONOMA_ROOT="$(pwd)"
 echo "$AUTONOMA_ROOT" > /tmp/autonoma-project-root
-mkdir -p autonoma/skills autonoma/qa-tests
+mkdir -p autonoma autonoma/skills autonoma/qa-tests
+cleanup_dev_server() {
+  DEV_SERVER_PID=$(cat /tmp/autonoma-dev-server-pid 2>/dev/null || echo '')
+  if [ -n "$DEV_SERVER_PID" ]; then
+    kill "$DEV_SERVER_PID" 2>/dev/null || true
+    rm -f /tmp/autonoma-dev-server-pid
+    echo "Dev server (PID $DEV_SERVER_PID) stopped."
+  fi
+}
 ```
 
-The plugin root path (where hooks, validators, and helper scripts live) is persisted to `/tmp/autonoma-plugin-root` automatically by the PostToolUse validation hook on the first Write. All bash snippets that need plugin-local files read it back:
+The plugin root path is persisted to `/tmp/autonoma-plugin-root` automatically by the PostToolUse hook on the first Write:
+
 ```bash
 PLUGIN_ROOT=$(cat /tmp/autonoma-plugin-root 2>/dev/null || echo '')
 ```
 
-Read the environment variables. These are required for reporting progress back to Autonoma:
-- `AUTONOMA_API_KEY` — your Autonoma API key
-- `AUTONOMA_PROJECT_ID` — your Autonoma project ID
-- `AUTONOMA_API_URL` — Autonoma API base URL
-- `AUTONOMA_AUTO_ADVANCE` — (optional) set to `true` to skip user confirmation prompts between steps
+Read the environment variables required for reporting progress back to Autonoma:
+- `AUTONOMA_API_KEY`
+- `AUTONOMA_PROJECT_ID`
+- `AUTONOMA_API_URL`
+- `AUTONOMA_REQUIRE_CONFIRMATION` — optional
 
-Before creating the record, derive a clean human-readable application name from the repository. Look at the git remote URL, the directory name, and any `package.json` / `pyproject.toml` / `README.md` to infer what the product is actually called. Prefer the product name over the repo slug (e.g. "My App" not "my-app-v2-final"). Store it in `APP_NAME`.
+Prepare the SDK reference repo for Step 1:
+
+```bash
+SDK_REF_DIR="${AUTONOMA_SDK_REF_DIR:-}"
+if [ -n "$SDK_REF_DIR" ] && [ -d "$SDK_REF_DIR" ]; then
+  echo "$SDK_REF_DIR" > /tmp/autonoma-sdk-ref-dir
+else
+  SDK_REF_DIR="$(mktemp -d)/autonoma-sdk"
+  if git clone --depth 1 https://github.com/Autonoma-AI/sdk.git "$SDK_REF_DIR"; then
+    echo "$SDK_REF_DIR" > /tmp/autonoma-sdk-ref-dir
+  else
+    echo "ERROR: Unable to prepare the SDK reference repo."
+    cleanup_dev_server
+    exit 1
+  fi
+fi
+```
+
+Before creating the record, derive a clean human-readable application name from the repository. Look at the git remote URL, the directory name, and any `package.json` / `pyproject.toml` / `README.md` to infer what the product is actually called. Prefer the product name over the repo slug.
 
 Create the generation record so the dashboard can track progress in real time:
+
 ```bash
 RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "${AUTONOMA_API_URL}/v1/setup/setups" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
@@ -58,16 +86,80 @@ HTTP_STATUS=$(echo "$RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
 BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
 echo "Setup API response (HTTP $HTTP_STATUS): $BODY"
 GENERATION_ID=$(echo "$BODY" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo '')
-mkdir -p autonoma
 echo "$GENERATION_ID" > autonoma/.generation-id
 echo "Generation ID: $GENERATION_ID"
 ```
 
-If `GENERATION_ID` is empty, log the HTTP status and response body above for debugging, then continue anyway — reporting is best-effort and must never block test generation.
+If `GENERATION_ID` is empty, log the HTTP status and response body above for debugging, then continue anyway.
 
-## Step 1: Generate Knowledge Base
+## Step 1: SDK Integration
 
 Report step start:
+
+```bash
+AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
+GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
+SDK_REF_DIR=$(cat /tmp/autonoma-sdk-ref-dir 2>/dev/null || echo '')
+echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"step.started","data":{"step":0,"name":"SDK Integration"}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"log","data":{"message":"Detecting stack and integrating the Autonoma SDK..."}}' || true
+```
+
+Spawn the `sdk-integrator` subagent with the following task:
+
+> Read the SDK reference repo path from `/tmp/autonoma-sdk-ref-dir` and use it as read-only context.
+> Detect the project stack, map it against the supported SDK docs matrix, and stop immediately with
+> a `mailto:support@autonoma.app` link if unsupported.
+> Create a branch, install the SDK from package managers only, implement the SDK endpoint following
+> the matching example or README pattern, ensure `AUTONOMA_SHARED_SECRET` and `AUTONOMA_SIGNING_SECRET`
+> exist in `.env`, update `.env.example`, keep `autonoma/` out of commits, start or reuse a dev server,
+> verify signed `discover`, `up`, and `down`, write `autonoma/.sdk-endpoint`, commit with
+> `feat: integrate autonoma sdk`, and create a PR if `gh` is available.
+> Do NOT modify the SDK source repo. Do NOT modify database schemas, migrations, or models.
+
+**After the subagent completes:**
+1. Verify `autonoma/.sdk-endpoint` exists and is non-empty
+2. Read and export `AUTONOMA_SDK_ENDPOINT` from that file
+3. Read `AUTONOMA_SHARED_SECRET` and `AUTONOMA_SIGNING_SECRET` from `.env`
+4. Confirm the endpoint is reachable with a signed `discover` request
+5. Retain `/tmp/autonoma-dev-server-pid` for cleanup after the pipeline finishes
+6. Present the summary to the user — detected stack, packages installed, endpoint URL, PR URL if available
+
+Load the endpoint and secrets:
+
+```bash
+AUTONOMA_SDK_ENDPOINT=$(tr -d '\n' < "$AUTONOMA_ROOT/autonoma/.sdk-endpoint" 2>/dev/null || echo '')
+AUTONOMA_SHARED_SECRET=$(grep '^AUTONOMA_SHARED_SECRET=' "$AUTONOMA_ROOT/.env" 2>/dev/null | tail -n 1 | cut -d= -f2-)
+AUTONOMA_SIGNING_SECRET=$(grep '^AUTONOMA_SIGNING_SECRET=' "$AUTONOMA_ROOT/.env" 2>/dev/null | tail -n 1 | cut -d= -f2-)
+export AUTONOMA_SDK_ENDPOINT AUTONOMA_SHARED_SECRET AUTONOMA_SIGNING_SECRET
+
+if [ -z "$AUTONOMA_SDK_ENDPOINT" ] || [ -z "$AUTONOMA_SHARED_SECRET" ]; then
+  echo "ERROR: Step 1 did not produce a usable SDK endpoint and shared secret."
+  cleanup_dev_server
+  exit 1
+fi
+
+BODY='{"action":"discover"}'
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$AUTONOMA_SHARED_SECRET" | sed 's/.*= //')
+HTTP_STATUS=$(curl -sS -o /tmp/autonoma-sdk-discover-check.json -w "%{http_code}" -X POST "$AUTONOMA_SDK_ENDPOINT" \
+  -H "Content-Type: application/json" \
+  -H "x-signature: $SIG" \
+  -d "$BODY")
+if [ "$HTTP_STATUS" != "200" ]; then
+  echo "ERROR: SDK discover check failed after Step 1 (HTTP $HTTP_STATUS)."
+  cleanup_dev_server
+  exit 1
+fi
+```
+
+Report step complete:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
@@ -75,7 +167,31 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":0,"name":"Knowledge Base"}}' || true
+  -d '{"type":"step.completed","data":{"step":0,"name":"SDK Integration"}}' || true
+```
+
+7. **If `AUTONOMA_REQUIRE_CONFIRMATION=true`:** Call `AskUserQuestion` with:
+   - question: "Does this SDK integration summary look correct? The next step will use the endpoint produced here."
+   - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
+   Wait for the user's response before proceeding.
+   **Otherwise:** Skip the prompt and proceed directly to Step 2.
+
+## Step 2: Generate Knowledge Base
+
+Report step start:
+
+```bash
+AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
+GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
+echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"step.started","data":{"step":1,"name":"Knowledge Base"}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"log","data":{"message":"Analyzing codebase structure and identifying features..."}}' || true
 ```
 
 Spawn the `kb-generator` subagent with the following task:
@@ -93,15 +209,20 @@ Spawn the `kb-generator` subagent with the following task:
 3. Read the file and present the frontmatter to the user — specifically the core_flows table
 
 Report step complete and upload skills:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
+SKILL_COUNT=$(ls "$AUTONOMA_ROOT/autonoma/skills/"*.md 2>/dev/null | wc -l | tr -d ' ')
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":0,"name":"Knowledge Base"}}' || true
-
+  -d "{\"type\":\"log\",\"data\":{\"message\":\"Knowledge base complete. Generated ${SKILL_COUNT} skills. Uploading to dashboard...\"}}" || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"step.completed","data":{"step":1,"name":"Knowledge Base"}}' || true
 [ -n "$GENERATION_ID" ] && python3 -c "
 import os, json
 root = open('/tmp/autonoma-project-root').read().strip() if os.path.exists('/tmp/autonoma-project-root') else '.'
@@ -119,15 +240,16 @@ print(json.dumps({'skills': skills}))
   -d @- || true
 ```
 
-4. **If `AUTONOMA_AUTO_ADVANCE` is not `true`:** Call `AskUserQuestion` with:
+4. **If `AUTONOMA_REQUIRE_CONFIRMATION=true`:** Call `AskUserQuestion` with:
    - question: "Does this core flows table look correct? These flows determine how the test budget is distributed."
-   - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
+   - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
    Wait for the user's response before proceeding.
-   **If `AUTONOMA_AUTO_ADVANCE=true`:** Skip the prompt and proceed directly to Step 2.
+   **Otherwise:** Skip the prompt and proceed directly to Step 3.
 
-## Step 2: Generate Scenarios
+## Step 3: Generate Scenarios
 
 Report step start:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
@@ -135,21 +257,28 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":1,"name":"Scenarios"}}' || true
+  -d '{"type":"step.started","data":{"step":2,"name":"Scenarios"}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"log","data":{"message":"Mapping data model and designing test data environments..."}}' || true
 ```
 
-Before spawning the Step 2 subagent, fetch the SDK discover artifact and save it to `autonoma/discover.json`.
-This step requires these environment variables:
-- `AUTONOMA_SDK_ENDPOINT` — full URL of the customer's SDK endpoint
-- `AUTONOMA_SHARED_SECRET` — the HMAC shared secret used by the SDK endpoint
-
-If either variable is missing, stop and tell the user that Step 2 now requires SDK discover access.
-Do not suggest skipping ahead, reordering the pipeline, or continuing without a working Environment Factory endpoint.
-State plainly that the endpoint and both environment variables are mandatory prerequisites for Step 2.
+Before spawning the subagent, fetch the SDK discover artifact and save it to `autonoma/discover.json`.
+This step assumes Step 1 already produced:
+- `AUTONOMA_SDK_ENDPOINT`
+- `AUTONOMA_SHARED_SECRET`
 
 Fetch and validate the artifact:
+
 ```bash
-mkdir -p autonoma
+AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
+mkdir -p "$AUTONOMA_ROOT/autonoma"
+if [ -z "$AUTONOMA_SDK_ENDPOINT" ] || [ -z "$AUTONOMA_SHARED_SECRET" ]; then
+  echo "ERROR: Step 1 did not leave AUTONOMA_SDK_ENDPOINT and AUTONOMA_SHARED_SECRET available."
+  cleanup_dev_server
+  exit 1
+fi
 BODY='{"action":"discover"}'
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$AUTONOMA_SHARED_SECRET" | sed 's/.*= //')
 RESPONSE=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" -X POST "$AUTONOMA_SDK_ENDPOINT" \
@@ -160,14 +289,12 @@ HTTP_STATUS=$(echo "$RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
 DISCOVER_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
 if [ "$HTTP_STATUS" != "200" ]; then
   echo "SDK discover failed (HTTP $HTTP_STATUS): $DISCOVER_BODY"
+  cleanup_dev_server
   exit 1
 fi
-printf '%s\n' "$DISCOVER_BODY" > autonoma/discover.json
-python3 "$(cat /tmp/autonoma-plugin-root)/hooks/validators/validate_discover.py" autonoma/discover.json
+printf '%s\n' "$DISCOVER_BODY" > "$AUTONOMA_ROOT/autonoma/discover.json"
+python3 "$(cat /tmp/autonoma-plugin-root)/hooks/validators/validate_discover.py" "$AUTONOMA_ROOT/autonoma/discover.json"
 ```
-
-If the fetch fails or validation fails, stop the pipeline at Step 2.
-Do not suggest skipping ahead. Tell the user to provide a working SDK endpoint and correct shared secret, then rerun the command.
 
 Spawn the `scenario-generator` subagent with the following task:
 
@@ -183,12 +310,12 @@ Spawn the `scenario-generator` subagent with the following task:
 
 **After the subagent completes:**
 1. Verify `autonoma/discover.json` and `autonoma/scenarios.md` exist and are non-empty
-2. Validate `autonoma/discover.json` using the plugin's validator (path saved in `/tmp/autonoma-plugin-root`)
+2. Validate `autonoma/discover.json` using the plugin's validator
 3. The PostToolUse hook will have validated the frontmatter format automatically
-4. Read the file and present the frontmatter summary to the user — scenario names, entity counts,
-   entity types, discover schema counts, and the minimal variable field tokens that remain dynamic
+4. Read the file and present the summary to the user — scenario names, entity counts, entity types, discover schema counts, and the minimal variable field tokens that remain dynamic
 
 Report step complete:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
@@ -196,18 +323,23 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":1,"name":"Scenarios"}}' || true
+  -d '{"type":"log","data":{"message":"Scenarios generated from SDK discover. Preserved standard/empty/large plus schema metadata, keeping variable fields minimal and intentional."}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"step.completed","data":{"step":2,"name":"Scenarios"}}' || true
 ```
 
-4. **If `AUTONOMA_AUTO_ADVANCE` is not `true`:** Call `AskUserQuestion` with:
-   - question: "Do these scenarios look correct? Most seed values should stay concrete, ideally as planner-chosen literals with discriminators, and only truly dynamic values should remain variable for later tests."
-   - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
+4. **If `AUTONOMA_REQUIRE_CONFIRMATION=true`:** Call `AskUserQuestion` with:
+   - question: "Do these scenarios look correct? Most seed values should stay concrete, and only truly dynamic values should remain variable for later tests."
+   - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
    Wait for the user's response before proceeding.
-   **If `AUTONOMA_AUTO_ADVANCE=true`:** Skip the prompt and proceed directly to Step 3.
+   **Otherwise:** Skip the prompt and proceed directly to Step 4.
 
-## Step 3: Generate E2E Test Cases
+## Step 4: Generate E2E Test Cases
 
 Report step start:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
@@ -215,7 +347,11 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":2,"name":"E2E Tests"}}' || true
+  -d '{"type":"step.started","data":{"step":3,"name":"E2E Tests"}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"log","data":{"message":"Generating E2E test cases from knowledge base and scenarios..."}}' || true
 ```
 
 Spawn the `test-case-generator` subagent with the following task:
@@ -237,15 +373,20 @@ Spawn the `test-case-generator` subagent with the following task:
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
 
 Report step complete and upload test cases:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
 echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
+TEST_COUNT=$(find "$AUTONOMA_ROOT/autonoma/qa-tests" -name '*.md' ! -name 'INDEX.md' 2>/dev/null | wc -l | tr -d ' ')
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":2,"name":"E2E Tests"}}' || true
-
+  -d "{\"type\":\"log\",\"data\":{\"message\":\"Generated ${TEST_COUNT} test cases. Uploading to dashboard...\"}}" || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"step.completed","data":{"step":3,"name":"E2E Tests"}}' || true
 [ -n "$GENERATION_ID" ] && python3 -c "
 import os, json
 proj_root = open('/tmp/autonoma-project-root').read().strip() if os.path.exists('/tmp/autonoma-project-root') else '.'
@@ -269,15 +410,16 @@ print(json.dumps({'testCases': test_cases}))
   -d @- || true
 ```
 
-4. **If `AUTONOMA_AUTO_ADVANCE` is not `true`:** Call `AskUserQuestion` with:
-   - question: "Does this test distribution look correct? The total test count should roughly correlate with the number of routes/features in your app."
-   - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
+4. **If `AUTONOMA_REQUIRE_CONFIRMATION=true`:** Call `AskUserQuestion` with:
+   - question: "Does this test distribution look correct? The total test count should roughly correlate with the number of routes and features in your app."
+   - options: ["Yes, proceed to Step 5", "I want to suggest changes"]
    Wait for the user's response before proceeding.
-   **If `AUTONOMA_AUTO_ADVANCE=true`:** Skip the prompt and proceed directly to Step 4.
+   **Otherwise:** Skip the prompt and proceed directly to Step 5.
 
-## Step 4: Environment Factory
+## Step 5: Scenario Validation
 
 Report step start:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
@@ -285,55 +427,42 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":3,"name":"Environment Factory"}}' || true
+  -d '{"type":"step.started","data":{"step":4,"name":"Scenario Validation"}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"log","data":{"message":"Validating planned scenarios against the live SDK endpoint..."}}' || true
 ```
 
-This step requires these environment variables:
-- `AUTONOMA_SDK_ENDPOINT` — full URL of the customer's SDK endpoint
-- `AUTONOMA_SHARED_SECRET` — the HMAC shared secret used by the SDK endpoint
-
-If either variable is missing, stop and tell the user that Step 4 requires SDK endpoint access for
-preflight validation. State plainly that both environment variables are mandatory.
-
-Spawn the `env-factory-generator` subagent with the following task:
+Spawn the `scenario-validator` subagent with the following task:
 
 > Read `autonoma/discover.json` and `autonoma/scenarios.md`.
-> Implement or complete the Autonoma Environment Factory in the project's backend so it can
-> support the planned scenarios with the current SDK contract, then validate the planned scenarios
-> against that implementation.
-> Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-4-implement-scenarios.txt
-> and https://docs.agent.autonoma.app/llms/guides/environment-factory.txt first.
-> Preserve the existing discover integration if it already works, and finish `up` / `down`
-> behavior using `AUTONOMA_SHARED_SECRET` and `AUTONOMA_SIGNING_SECRET`.
-> Smoke-test the discover -> up -> down lifecycle in-session after implementing.
-> Then validate `standard`, `empty`, and `large`, and write approved recipes to `autonoma/scenario-recipes.json`.
-> The recipe file must match the current setup API schema:
-> top-level `version: 1`, `source`, `validationMode`, `recipes`; each recipe must use
-> `name`, `description`, `create`, and `validation` with `status: "validated"`,
-> a valid `method`, `phase: "ok"`, and optional `up_ms` / `down_ms`.
-> Do not use the old shape with top-level `scenarios`, `generatedAt`, or per-recipe `validated` / `timing`.
-> When `create` uses `{{token}}` placeholders, include a `variables` field per recipe that defines
-> how each token is resolved. Allowed strategies: `literal`, `derived`, `faker`.
-> Persisted `create` must remain tokenized — never store resolved concrete values.
-> After writing the recipe file, run the preflight helper to validate all recipes against the
-> live SDK endpoint before uploading:
+> Validate the planned scenarios against the existing live SDK endpoint without editing backend code.
+> Smoke-test the signed `discover -> up -> down` lifecycle, validate `standard`, `empty`, and `large`,
+> write approved recipes to `autonoma/scenario-recipes.json`, and run:
 > `python3 "$(cat /tmp/autonoma-plugin-root)/hooks/preflight_scenario_recipes.py" autonoma/scenario-recipes.json`
-> The preflight must pass for all three scenarios before Step 4 is considered complete.
+> Do NOT install packages, edit backend code, modify SDK source, modify DB schemas or migrations, or create branches/commits/PRs.
 
 **After the subagent completes:**
-1. Verify the backend implementation or integration changes were made
-2. Verify `autonoma/scenario-recipes.json` exists and is non-empty
-3. Run the preflight helper if the subagent did not already do so:
+1. Verify `autonoma/scenario-recipes.json` exists and is non-empty
+2. Run the preflight helper if the subagent did not already do so
+3. If preflight fails, stop and report the failure without attempting code changes
+4. Present the results to the user — endpoint validated, smoke-test results, per-scenario validation results, any remaining deployment issues
+
+Run and enforce preflight:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 python3 "$(cat /tmp/autonoma-plugin-root)/hooks/preflight_scenario_recipes.py" "$AUTONOMA_ROOT/autonoma/scenario-recipes.json"
+if [ $? -ne 0 ]; then
+  echo "ERROR: Scenario recipe preflight failed."
+  cleanup_dev_server
+  exit 1
+fi
 ```
-If preflight fails, do NOT proceed to upload. Report the failure to the user and stop.
-4. Present the results to the user — endpoint location, what was implemented or fixed, smoke-test results, per-scenario preflight results
-5. Report which environment variables the backend now requires
-6. Report any backend issues that still need manual attention
 
-Report step complete:
+Report step complete and upload scenario recipes:
+
 ```bash
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id" 2>/dev/null || echo '')
@@ -343,10 +472,10 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Uploading validated scenario recipes to setup..."}}' || true
 if [ -n "$GENERATION_ID" ]; then
-  AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
   RECIPE_PATH="$AUTONOMA_ROOT/autonoma/scenario-recipes.json"
   if ! python3 -c "import json; json.load(open('$RECIPE_PATH'))" 2>/dev/null; then
-    echo "ERROR: scenario-recipes.json is not valid JSON. Step 4 cannot complete."
+    echo "ERROR: scenario-recipes.json is not valid JSON. Step 5 cannot complete."
+    cleanup_dev_server
     exit 1
   fi
   UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/scenario-recipe-versions" \
@@ -357,50 +486,39 @@ if [ -n "$GENERATION_ID" ]; then
   UPLOAD_BODY=$(echo "$UPLOAD_RESPONSE" | sed '/HTTP_STATUS:/d')
   echo "Scenario recipe upload response (HTTP $UPLOAD_STATUS): $UPLOAD_BODY"
   if [ "$UPLOAD_STATUS" != "200" ] && [ "$UPLOAD_STATUS" != "201" ]; then
-    echo "ERROR: Recipe upload failed (HTTP $UPLOAD_STATUS). Step 4 cannot complete."
+    echo "ERROR: Recipe upload failed (HTTP $UPLOAD_STATUS). Step 5 cannot complete."
+    cleanup_dev_server
     exit 1
   fi
 
-  # Verify recipes were persisted by fetching them back from the dashboard
   VERIFY_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X GET "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/scenarios" \
     -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
   VERIFY_STATUS=$(echo "$VERIFY_RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
   VERIFY_BODY=$(echo "$VERIFY_RESPONSE" | sed '/HTTP_STATUS:/d')
   if [ "$VERIFY_STATUS" != "200" ]; then
-    echo "ERROR: Failed to verify scenarios (HTTP $VERIFY_STATUS). Step 4 cannot complete."
+    echo "ERROR: Failed to verify uploaded scenarios (HTTP $VERIFY_STATUS)."
+    cleanup_dev_server
     exit 1
   fi
-  # Extract scenario names from the uploaded recipes file and verify each one exists with an active recipe
-  EXPECTED_NAMES=$(python3 -c "import json; data=json.load(open('$RECIPE_PATH')); print('\n'.join(r['name'] for r in data['recipes']))")
-  MISSING=""
-  for NAME in $EXPECTED_NAMES; do
-    HAS_ACTIVE=$(echo "$VERIFY_BODY" | python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
-match = [s for s in data.get('scenarios', []) if s['name'] == '$NAME' and s.get('hasActiveRecipe')]
-print('yes' if match else 'no')
-" 2>/dev/null || echo "no")
-    if [ "$HAS_ACTIVE" != "yes" ]; then
-      MISSING="$MISSING $NAME"
-    fi
-  done
-  if [ -n "$MISSING" ]; then
-    echo "ERROR: The following scenarios are missing or lack an active recipe on the dashboard:$MISSING"
-    echo "Step 4 cannot complete. Recipe upload may have partially failed."
-    exit 1
-  fi
-  echo "Verified: all scenario recipes persisted successfully on the dashboard."
 fi
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":3,"name":"Environment Factory"}}' || true
+  -d '{"type":"log","data":{"message":"Scenario validation completed."}}' || true
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"step.completed","data":{"step":4,"name":"Scenario Validation"}}' || true
+cleanup_dev_server
 ```
 
 ## Completion
 
 After all steps complete, summarize:
-- **Step 1**: Knowledge base location and core flow count
-- **Step 2**: Scenario count and entity types covered
-- **Step 3**: Total test count, folder breakdown, coverage correlation
-- **Step 4**: Environment Factory location, backend changes, smoke-test results, required secrets, and per-scenario lifecycle results
+- **Step 1**: detected stack, installed packages, endpoint URL, PR URL if available
+- **Step 2**: knowledge base location and core flow count
+- **Step 3**: scenario count and entity types covered
+- **Step 4**: total test count, folder breakdown, coverage correlation
+- **Step 5**: scenario validation results, smoke-test status, and recipe upload status
+
+If the pipeline aborts after Step 1 has started, run `cleanup_dev_server` before returning control to the user.
