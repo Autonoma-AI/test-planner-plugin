@@ -159,8 +159,18 @@ Spawn the `test-case-generator` subagent with the following task:
 
 **After the subagent completes:**
 1. Verify `autonoma/qa-tests/INDEX.md` exists and is non-empty
-2. The PostToolUse hook will have validated the INDEX frontmatter, individual test file frontmatter, emitted step 4 completed, and uploaded the test cases to the dashboard
+2. The PostToolUse hook will have validated the INDEX frontmatter, individual test file frontmatter, and uploaded the test cases to the dashboard. `step.completed` for step 4 fires via INDEX.md validation AND again when you write the pipeline-complete sentinel below (idempotent — whichever fires first wins; the sentinel is the deterministic backstop).
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
+4. **Write the pipeline-complete sentinel.** Use the `Write` tool to create `autonoma/.pipeline-complete` with a short plain-text summary, e.g.:
+
+   ```
+   Pipeline complete.
+   - total_tests: <N>
+   - folders: <list>
+   - coverage_correlation: <summary>
+   ```
+
+   The hook converts that into `step.completed` for step 4, which triggers the backend to mark the setup complete and advance onboarding. Do NOT use `touch` — the hook only fires on `Write`/`Edit`.
 
 ## Completion
 

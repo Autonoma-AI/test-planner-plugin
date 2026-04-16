@@ -130,6 +130,10 @@ case "$FILE_PATH" in
     emit_step_event 3 completed "Implement & Validate"
     exit 0
     ;;
+  */autonoma/.pipeline-complete)
+    emit_step_event 4 completed "E2E Tests"
+    exit 0
+    ;;
   */autonoma/.step-*-ack)
     ack_num=$(basename "$FILE_PATH" | sed -E 's/^\.step-([0-9]+)-ack$/\1/')
     if [[ "$ack_num" =~ ^[0-9]+$ ]] && [ "$ack_num" -ge 0 ] && [ "$ack_num" -lt ${#STEP_NAMES[@]} ]; then
