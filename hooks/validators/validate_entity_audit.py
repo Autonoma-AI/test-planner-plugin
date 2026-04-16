@@ -59,8 +59,8 @@ for i, model in enumerate(models):
         print(f'models[{i}] must be a mapping')
         sys.exit(1)
 
-    # Every model needs name and needs_factory
-    for field in ['name', 'needs_factory']:
+    # Every model needs name and has_creation_code
+    for field in ['name', 'has_creation_code']:
         if field not in model:
             print(f'models[{i}] missing required field: {field}')
             sys.exit(1)
@@ -69,8 +69,8 @@ for i, model in enumerate(models):
         print(f'models[{i}].name must be a non-empty string')
         sys.exit(1)
 
-    if not isinstance(model['needs_factory'], bool):
-        print(f'models[{i}].needs_factory must be a boolean (true/false)')
+    if not isinstance(model['has_creation_code'], bool):
+        print(f'models[{i}].has_creation_code must be a boolean (true/false)')
         sys.exit(1)
 
     # Every model needs a reason
@@ -78,25 +78,27 @@ for i, model in enumerate(models):
         print(f'models[{i}] ({model["name"]}) missing required field: reason (string)')
         sys.exit(1)
 
-    if model['needs_factory']:
+    if model['has_creation_code']:
         factory_count += 1
 
-        # Models needing factories must have creation_file and side_effects
+        # Models with creation code must have creation_file and creation_function
         if 'creation_file' not in model or not isinstance(model.get('creation_file'), str):
-            print(f'models[{i}] ({model["name"]}) needs_factory=true but missing creation_file')
+            print(f'models[{i}] ({model["name"]}) has_creation_code=true but missing creation_file')
             sys.exit(1)
 
-        if 'side_effects' not in model:
-            print(f'models[{i}] ({model["name"]}) needs_factory=true but missing side_effects')
+        if 'creation_function' not in model or not isinstance(model.get('creation_function'), str):
+            print(f'models[{i}] ({model["name"]}) has_creation_code=true but missing creation_function')
             sys.exit(1)
 
-        effects = model['side_effects']
-        if not isinstance(effects, list) or len(effects) == 0:
-            print(f'models[{i}] ({model["name"]}) side_effects must be a non-empty list when needs_factory=true')
-            sys.exit(1)
+        # side_effects is optional, but when present must be a list
+        if 'side_effects' in model:
+            effects = model['side_effects']
+            if not isinstance(effects, list):
+                print(f'models[{i}] ({model["name"]}) side_effects must be a list when present')
+                sys.exit(1)
 
 if factory_count != fm['factory_count']:
-    print(f'factory_count ({fm["factory_count"]}) does not match actual factories in models ({factory_count})')
+    print(f'factory_count ({fm["factory_count"]}) does not match actual models with creation code ({factory_count})')
     sys.exit(1)
 
 print('OK')

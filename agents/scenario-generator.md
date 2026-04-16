@@ -21,20 +21,32 @@ and `autonoma/skills/`. Your output MUST be written to `autonoma/scenarios.md` w
 
 ## Instructions
 
-1. First, fetch the latest scenario generation instructions:
+1. Before fetching any documentation, determine the docs URL:
 
-   Use WebFetch to read `https://docs.agent.autonoma.app/llms/test-planner/step-2-scenarios.txt`
+   ```bash
+   cat autonoma/.docs-url 2>/dev/null
+   ```
+
+   The orchestrator writes this file at the start of the pipeline with either the default
+   `https://docs.agent.autonoma.app` or a user-provided override (e.g., `http://localhost:4321`
+   during docs development). If the file is missing or empty, default to
+   `https://docs.agent.autonoma.app`. Use this value as `<DOCS_URL>` in every WebFetch below.
+   **Never hardcode a docs URL.**
+
+2. Fetch the latest scenario generation instructions:
+
+   Use WebFetch to read `<DOCS_URL>/llms/test-planner/step-2-scenarios.txt`
    and follow those instructions for how to design scenarios.
 
-2. Read `autonoma/AUTONOMA.md` fully — understand the application, core flows, and entity types.
+3. Read `autonoma/AUTONOMA.md` fully — understand the application, core flows, and entity types.
 
-3. Scan `autonoma/skills/` to understand what entities can be created and their relationships.
+4. Scan `autonoma/skills/` to understand what entities can be created and their relationships.
 
-4. Explore the backend codebase to map the data model (database schema, API routes, types).
+5. Explore the backend codebase to map the data model (database schema, API routes, types).
 
-5. Design three scenarios: `standard`, `empty`, `large`.
+6. Design three scenarios: `standard`, `empty`, `large`.
 
-6. Write the output to `autonoma/scenarios.md`.
+7. Write the output to `autonoma/scenarios.md`.
 
 ## CRITICAL: Output Format
 

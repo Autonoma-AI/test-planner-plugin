@@ -27,27 +27,39 @@ Your output is a directory `autonoma/qa-tests/` containing:
 
 ## Instructions
 
-1. First, fetch the latest test generation instructions:
+1. Before fetching any documentation, determine the docs URL:
 
-   Use WebFetch to read `https://docs.agent.autonoma.app/llms/test-planner/step-3-e2e-tests.txt`
+   ```bash
+   cat autonoma/.docs-url 2>/dev/null
+   ```
+
+   The orchestrator writes this file at the start of the pipeline with either the default
+   `https://docs.agent.autonoma.app` or a user-provided override (e.g., `http://localhost:4321`
+   during docs development). If the file is missing or empty, default to
+   `https://docs.agent.autonoma.app`. Use this value as `<DOCS_URL>` in every WebFetch below.
+   **Never hardcode a docs URL.**
+
+2. Fetch the latest test generation instructions:
+
+   Use WebFetch to read `<DOCS_URL>/llms/test-planner/step-3-e2e-tests.txt`
    and follow those instructions for how to generate tests.
 
-2. Read all input files:
+3. Read all input files:
    - `autonoma/AUTONOMA.md` — parse the frontmatter to get core_flows and feature_count
    - All files in `autonoma/skills/`
    - `autonoma/scenarios.md` — parse the frontmatter to get scenarios and entity_types
 
-3. Count the routes/features/pages in the codebase to establish the coverage correlation.
+4. Count the routes/features/pages in the codebase to establish the coverage correlation.
    The total test count should roughly correlate:
    - Rule of thumb: 3-5 tests per route/feature for supporting flows
    - Rule of thumb: 8-15 tests per core flow
    - This is approximate — use judgment, but the INDEX must declare the correlation
 
-4. Generate test files organized in subdirectories by feature/flow.
+5. Generate test files organized in subdirectories by feature/flow.
 
-5. Write `autonoma/qa-tests/INDEX.md` FIRST (before individual test files).
+6. Write `autonoma/qa-tests/INDEX.md` FIRST (before individual test files).
 
-6. Write individual test files into subdirectories.
+7. Write individual test files into subdirectories.
 
 ## CRITICAL: INDEX.md Format
 

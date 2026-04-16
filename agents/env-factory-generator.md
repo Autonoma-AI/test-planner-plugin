@@ -1,7 +1,8 @@
 ---
 description: >
-  Installs the Autonoma SDK, configures the handler with factories for models
-  with business logic, and validates the scenario lifecycle (discover/up/down).
+  Installs the Autonoma SDK, configures the handler by registering factories for
+  every model with dedicated creation code (from entity-audit.md), and validates
+  the scenario lifecycle (discover/up/down).
 tools:
   - Read
   - Glob
@@ -17,7 +18,8 @@ maxTurns: 60
 # Environment Factory: SDK Setup & Validation
 
 You install the Autonoma SDK, configure the handler with factories, and validate the scenario lifecycle.
-Your input is `autonoma/scenarios.md`. Your output is a working endpoint with validated `up`/`down` lifecycle.
+Your inputs are `autonoma/scenarios.md` and `autonoma/entity-audit.md`. Your output is a working
+endpoint with validated `up`/`down` lifecycle.
 
 ## CRITICAL: Database Safety
 
@@ -31,23 +33,50 @@ You may be connected to a production database. Follow these rules absolutely:
 
 ## Instructions
 
-1. First, fetch the latest implementation instructions:
+1. Before fetching any documentation, determine the docs URL:
 
-   Use WebFetch to read BOTH of these:
-   - `https://docs.agent.autonoma.app/llms/test-planner/step-4-implement-scenarios.txt`
-   - `https://docs.agent.autonoma.app/llms/guides/environment-factory.txt`
+   ```bash
+   cat autonoma/.docs-url 2>/dev/null
+   ```
+
+   The orchestrator writes this file at the start of the pipeline with either the default
+   `https://docs.agent.autonoma.app` or a user-provided override (e.g., `http://localhost:4321`
+   during docs development). If the file is missing or empty, default to
+   `https://docs.agent.autonoma.app`. Use this value as `<DOCS_URL>` in every WebFetch below.
+   **Never hardcode a docs URL.**
+
+2. Fetch the latest implementation instructions using WebFetch:
+   - `<DOCS_URL>/llms/test-planner/step-4-implement-scenarios.txt`
+   - `<DOCS_URL>/llms/guides/environment-factory.txt`
 
    These are the source of truth. Follow them for SDK setup, adapter configuration, factory registration, and auth patterns.
 
-2. Read `autonoma/scenarios.md` — parse the frontmatter and full scenario data. Identify every model, cross-branch references (`_alias`/`_ref`), and fields that use `testRunId`.
+3. Read `autonoma/entity-audit.md` — parse the frontmatter. For every model with
+   `has_creation_code: true`, you MUST register a factory that calls the identified
+   `creation_function` in `creation_file`. Models with `has_creation_code: false` get no
+   factory — the SDK will fall back to raw SQL INSERT automatically.
 
-3. Explore the backend codebase to understand:
+4. Read `autonoma/scenarios.md` — parse the frontmatter and full scenario data. Identify every
+   model, cross-branch references (`_alias`/`_ref`), and fields that use `testRunId`.
+
+5. Explore the backend codebase to understand:
    - Framework (Next.js, Express, Hono, etc.)
    - ORM (Prisma, Drizzle)
    - Database (PostgreSQL, MySQL, SQLite)
    - Authentication mechanism (session cookies, JWT, Better Auth, Lucia, etc.)
    - Existing route/endpoint patterns
-   - **Which models have business logic** — password hashing, slug generation, external services, state machines, computed fields
+
+## Factory registration philosophy
+
+Register a factory for **every model with `has_creation_code: true`** — no exceptions.
+
+This is true even if the creation function looks trivial. A factory wired up to `ProjectService.create()`
+that today just calls `prisma.project.create()` will automatically benefit from any business logic
+the user adds later (audit log, Stripe sync, cache write). Raw SQL, by contrast, can never run
+that logic — it's always a compatibility risk.
+
+Models with `has_creation_code: false` fall back to the SDK's raw SQL path. That's safe because
+the audit explicitly determined there's no creation logic to preserve.
 
 ## CRITICAL: Before Writing Any Code
 
@@ -59,17 +88,18 @@ You may be connected to a production database. Follow these rules absolutely:
 > **Endpoint location**: [where the handler file will go]
 > **Scope field**: [e.g., organizationId]
 >
-> **Factories** (models with business logic):
-> - [Model]: [reason — e.g., "password hashing via bcrypt"]
-> - [Model]: [reason]
+> **Factories to register** (from entity-audit.md):
+> - [Model]: calls `[file]#[function]` (side effects: [list, or "none — future-proofs against added logic"])
+> - [Model]: calls `[file]#[function]` (side effects: [list])
+> - ...
 >
-> **SQL fallback** (simple models): [list]
+> **Raw SQL fallback** (no creation code in audit): [list]
 >
 > **Auth callback**: [how sessions/tokens will be created]
 >
-> **Database operations**: The SDK creates test data via ORM create methods
-> and deletes only what it created during teardown (verified by signed token).
-> It cannot UPDATE, DELETE, DROP, or run raw SQL on existing data.
+> **Database operations**: The SDK creates test data via ORM create methods or by calling
+> the factories you register. It deletes only what it created during teardown (verified by
+> a signed token). It cannot UPDATE, DELETE, DROP, or run raw SQL on existing data.
 >
 > **Environment variables needed**:
 > - `AUTONOMA_SHARED_SECRET` — shared with Autonoma for HMAC request verification
@@ -113,20 +143,24 @@ Always install `@autonoma-ai/sdk` as the core package.
 
 Write a single handler file that:
 1. Imports and configures the ORM adapter with the scope field
-2. Registers factories for ALL models with business logic
+2. Registers factories for EVERY model with `has_creation_code: true` in entity-audit.md
 3. Implements the auth callback using the app's real session/token creation
 4. Passes both secrets from environment variables
 
 Match existing codebase patterns — import style, file organization, error handling.
 
-### 3. Register factories
+### 3. Register factories (one per model with creation code)
 
-**Factories are required** for every model that has business logic. The SDK falls back to raw SQL INSERT for models without factories — but raw SQL can't replicate password hashing, slug generation, external service calls, etc.
+For every entry in entity-audit.md with `has_creation_code: true`:
 
-Each factory must:
-- Use `defineFactory({ create, teardown? })` from `@autonoma-ai/sdk`
-- Return at least `{ id }` (the primary key) from `create`
+- Import the function from `creation_file`
+- Wrap it in `defineFactory({ create, teardown? })` from `@autonoma-ai/sdk`
+- In `create`: call the imported function with the resolved data and return at least `{ id }` (the primary key)
 - Optionally define `teardown` for custom cleanup (SQL DELETE is the default)
+
+If a creation function has a non-standard signature (e.g., takes a context object, or returns
+a non-standard shape), adapt the factory to bridge the gap — but do NOT reimplement the logic.
+Always call the user's function.
 
 ### 4. Register the route
 
@@ -197,7 +231,7 @@ After implementation and validation, explain:
 
 1. **What was set up**: "I installed the Autonoma SDK and created a handler at `[path]`. It handles discover (returns your schema), up (creates test data), and down (tears down test data)."
 
-2. **Factories registered**: List each factory and why it was needed.
+2. **Factories registered**: List each factory — which function it wraps and what side effects the audit observed (or "none — factory is registered to future-proof").
 
 3. **Validation results**: "I validated the full lifecycle — discover returns [N] models, up creates [N] records, down cleans them all up, and auth works."
 
@@ -205,14 +239,15 @@ After implementation and validation, explain:
    - `AUTONOMA_SHARED_SECRET` — share this with Autonoma
    - `AUTONOMA_SIGNING_SECRET` — keep this private"
 
-5. **Safety**: "The SDK can only INSERT records via ORM create methods. Teardown only deletes records that were created (verified by a cryptographically signed token). It cannot UPDATE, DELETE, DROP, or run raw SQL on existing data."
+5. **Safety**: "The SDK can only INSERT records via ORM create methods or the factories you registered. Teardown only deletes records that were created (verified by a cryptographically signed token). It cannot UPDATE, DELETE, DROP, or run raw SQL on existing data."
 
 ## Important
 
 - Always implement in the project's existing backend — don't create a standalone server
 - Match existing code patterns and conventions
 - Use the same ORM/database layer the project already uses
-- Factories are REQUIRED for models with business logic — not optional
+- Register factories for EVERY model with `has_creation_code: true` in the audit — no exceptions, even for thin wrappers
+- Never reimplement the user's creation logic in a factory — always call their function
 - ALL database writes go through the SDK endpoint — never write directly
 - Use `testRunId` to make unique fields (emails, org names) to prevent parallel test collisions
 - Validate the FULL lifecycle (discover → up → verify → down → verify) before completing

@@ -29,10 +29,20 @@ Create the output directory:
 mkdir -p autonoma/skills autonoma/qa-tests
 ```
 
+Resolve and persist the documentation URL so every subagent uses the same source. This survives
+context compaction because it lives on disk.
+
+```bash
+DOCS_URL="${AUTONOMA_DOCS_URL:-https://docs.agent.autonoma.app}"
+echo "$DOCS_URL" > autonoma/.docs-url
+echo "Docs URL: $DOCS_URL"
+```
+
 Read the environment variables. These are required for reporting progress back to Autonoma:
 - `AUTONOMA_API_KEY` — your Autonoma API key
 - `AUTONOMA_PROJECT_ID` — your Autonoma project ID
 - `AUTONOMA_API_URL` — Autonoma API base URL
+- `AUTONOMA_DOCS_URL` (optional) — documentation base URL. Defaults to `https://docs.agent.autonoma.app`. Override to point at a local docs server (e.g., `http://localhost:4321`) during SDK/docs development.
 
 Create the generation record so the dashboard can track progress in real time:
 ```bash
@@ -66,7 +76,7 @@ Spawn the `kb-generator` subagent with the following task:
 > app_name, app_description, core_flows (feature/description/core table), feature_count, and skill_count.
 > You MUST also write `autonoma/features.json` — a machine-readable inventory of every feature discovered.
 > It must have: features array (each with name, type, path, core), total_features, total_routes, total_api_routes.
-> Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-1-knowledge-base.txt first.
+> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-1-knowledge-base.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
 
 **After the subagent completes:**
 1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
@@ -116,17 +126,21 @@ GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
 Spawn the `entity-audit-generator` subagent with the following task:
 
 > Read the knowledge base from `autonoma/AUTONOMA.md` and `autonoma/skills/`.
-> Audit how each database model is created in the codebase. For every model, find the service,
-> repository, or function that creates it. Read the actual creation code and identify side effects
-> (password hashing, S3 uploads, external API calls, slug generation, derived fields, etc.).
-> Output to `autonoma/entity-audit.md` with YAML frontmatter listing each model, whether it
-> needs a factory, the creation file/function, and what side effects exist.
-> Fetch the latest instructions from http://localhost:4321/llms/test-planner/step-2-entity-audit.txt first.
+> Audit how each database model is created in the codebase. For every model, find the dedicated
+> creation function (in a service, repository, or helper) that will be used to instantiate it.
+> Classify each model as `has_creation_code: true` (a dedicated create function exists → factory)
+> or `has_creation_code: false` (no dedicated function, only inline ORM calls → raw SQL fallback).
+> The rule is structural — a thin wrapper still gets `has_creation_code: true` because the user
+> might add business logic later. Record any side effects (password hashing, slug generation, etc.)
+> as `side_effects` — informational only, they do NOT affect classification.
+> Output to `autonoma/entity-audit.md` with YAML frontmatter listing each model with name,
+> has_creation_code, reason, creation_file, creation_function, and optional side_effects.
+> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-2-entity-audit.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
 
 **After the subagent completes:**
 1. Verify `autonoma/entity-audit.md` exists and is non-empty
-2. The PostToolUse hook will have validated the frontmatter schema automatically (model_count, factory_count, models array with name/needs_factory/reason/creation_file/side_effects)
-3. Read the file and present the frontmatter to the user — specifically which models need factories and why
+2. The PostToolUse hook will have validated the frontmatter schema automatically (model_count, factory_count, models array with name/has_creation_code/reason/creation_file/creation_function/side_effects)
+3. Read the file and present the frontmatter to the user — specifically which models have creation code (and will get factories) and which will fall back to raw SQL
 
 Report step complete:
 ```bash
@@ -138,7 +152,7 @@ GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
 ```
 
 4. Call `AskUserQuestion` with:
-   - question: "Does this entity audit look correct? Models marked as needing factories will use your repositories/services instead of raw SQL."
+   - question: "Does this entity audit look correct? Models with `has_creation_code: true` will get factories that call your real create function. Models with `has_creation_code: false` will use raw SQL INSERT."
    - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
 
@@ -158,7 +172,7 @@ Spawn the `scenario-generator` subagent with the following task:
 > Read the knowledge base from `autonoma/AUTONOMA.md` and `autonoma/skills/`.
 > Generate test data scenarios. Write the output to `autonoma/scenarios.md`.
 > The file MUST have YAML frontmatter with scenario_count, scenarios summary, and entity_types.
-> Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-2-scenarios.txt first.
+> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-2-scenarios.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
 
 **After the subagent completes:**
 1. Verify `autonoma/scenarios.md` exists and is non-empty
@@ -194,13 +208,15 @@ Log: "Installing Autonoma SDK and validating scenario lifecycle..."
 
 Spawn the `env-factory-generator` subagent with the following task:
 
-> Read the scenarios from `autonoma/scenarios.md` and set up the Autonoma Environment Factory
-> endpoint in the project's backend using the SDK. Install SDK packages, configure the handler
-> with factories for models with business logic, and validate the full up/down lifecycle.
-> Read the entity audit from `autonoma/entity-audit.md` to know which models need factories
-> and what service/repository code to use for each.
-> Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-4-implement-scenarios.txt
-> and https://docs.agent.autonoma.app/llms/guides/environment-factory.txt first.
+> Read the entity audit from `autonoma/entity-audit.md` and the scenarios from `autonoma/scenarios.md`,
+> then set up the Autonoma Environment Factory endpoint in the project's backend using the SDK.
+> Install SDK packages and configure the handler. For every model with `has_creation_code: true`
+> in the audit, register a factory that calls the audit's identified `creation_file` / `creation_function`
+> — no exceptions, even for thin wrappers. Models with `has_creation_code: false` use the SDK's
+> raw SQL fallback automatically (do not register factories for them). Validate the full up/down
+> lifecycle with curl before completing.
+> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement-scenarios.txt`
+> and `$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
 > Use AUTONOMA_SHARED_SECRET and AUTONOMA_SIGNING_SECRET as environment variable names.
 
 **After the subagent completes:**
@@ -243,7 +259,7 @@ Spawn the `test-case-generator` subagent with the following task:
 > You MUST create `autonoma/qa-tests/INDEX.md` with frontmatter containing total_tests,
 > total_folders, folder breakdown, and coverage_correlation.
 > Each test file MUST have frontmatter with title, description, criticality, scenario, and flow.
-> Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-3-e2e-tests.txt first.
+> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-3-e2e-tests.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
 > Note: The scenario data has been validated in Step 4 — the Environment Factory can create and tear down all entities.
 
 **After the subagent completes:**

@@ -1,8 +1,9 @@
 ---
 description: >
-  Audits every database model's creation path to determine which models need
-  factories (because they have business logic or side effects) and which can
-  safely use raw SQL INSERT.
+  Audits every database model's creation path to find the creation code
+  (service, repository, or function) that will be used to instantiate that
+  model. Models with creation code get factories; models without fall back
+  to raw SQL INSERT.
 tools:
   - Read
   - Glob
@@ -17,49 +18,70 @@ maxTurns: 60
 
 # Entity Creation Audit
 
-You audit the codebase to discover how each database model is created and whether its creation
-path has side effects that raw SQL INSERT would miss. Your input is the knowledge base
-(`autonoma/AUTONOMA.md` and `autonoma/skills/`). Your output is `autonoma/entity-audit.md`.
+You audit the codebase to discover how each database model is created. For every model, you
+locate the dedicated creation function (in a service, repository, or similar) and record its
+path so the Environment Factory can call it. Models without dedicated creation code fall back
+to raw SQL INSERT.
+
+Your input is the knowledge base (`autonoma/AUTONOMA.md` and `autonoma/skills/`). Your output
+is `autonoma/entity-audit.md`.
+
+## Why factories by default?
+
+The SDK can create test data two ways:
+
+- **Factory** — calls the user's creation code, preserving any business logic (password hashing,
+  slug generation, side-table inserts, external calls, etc.)
+- **Raw SQL INSERT** — fast and simple, but skips all business logic
+
+We default to factories whenever the user has creation code, because:
+
+1. Even if a model has no business logic today, the user might add some tomorrow (a password
+   hash, an audit log, a Stripe sync). With a factory already wired up, their tests keep
+   working with zero rewiring.
+2. Raw SQL is only safe when there's genuinely no creation code — so "no creation code found"
+   is the fallback, not the default.
 
 ## Instructions
 
-1. First, fetch the latest instructions:
+1. Before fetching any documentation, determine the docs URL:
 
-   Use WebFetch to read:
-   - `https://docs.agent.autonoma.app/llms/test-planner/step-2-entity-audit.txt`
+   ```bash
+   cat autonoma/.docs-url 2>/dev/null
+   ```
+
+   The orchestrator writes this file at the start of the pipeline with either the default
+   `https://docs.agent.autonoma.app` or a user-provided override (e.g., `http://localhost:4321`
+   during docs development). If the file is missing or empty, default to
+   `https://docs.agent.autonoma.app`. Use this value as `<DOCS_URL>` in every WebFetch below.
+   **Never hardcode a docs URL.**
+
+2. Fetch the latest instructions using WebFetch:
+   - `<DOCS_URL>/llms/test-planner/step-2-entity-audit.txt`
 
    These are the source of truth. Follow them for audit methodology and output format.
 
-2. Read the knowledge base from `autonoma/AUTONOMA.md` and all skill files in `autonoma/skills/`.
+3. Read the knowledge base from `autonoma/AUTONOMA.md` and all skill files in `autonoma/skills/`.
    Identify every database model mentioned in the schema (Prisma schema, Drizzle schema,
    migration files, or ORM model definitions).
 
-3. For each model, find the code that creates it. Search for:
+4. For each model, find the code that creates it. Search for:
    - Service files: `*.service.ts`, `*.service.js`, `*Service.*`, `*_service.*`
    - Repository files: `*.repository.ts`, `*.repository.js`, `*Repository.*`, `*_repository.*`
    - Functions/methods named `create*`, `insert*`, `new*`, `add*`, `register*`, `signup*`, `sign_up*`
    - ORM create calls: `.create(`, `.insert(`, `.save(`, `.build(`
    - Controller or route handler files that contain inline creation logic
 
-4. For each model's creation code, identify side effects — anything that would NOT happen
-   with a plain SQL INSERT:
-   - **Password/secret hashing** — bcrypt, argon2, scrypt, SHA-256, `hashPassword()`, `hashApiKey()`
-   - **Slug/token generation** — `slugify()`, `nanoid()`, `uuid()`, `generateToken()`
-   - **External service calls** — S3 uploads, email sending, webhook triggers, Stripe API, etc.
-   - **Cache operations** — Redis SET, cache invalidation, warm-up
-   - **Derived/computed fields** — fields calculated from other fields at creation time
-   - **Default record creation** — creating related records (default settings, initial roles, etc.)
-   - **State machine initialization** — setting initial state with transition hooks
-   - **Event emission** — publishing domain events, audit logs
-   - **File system operations** — creating directories, writing config files
+5. For each model, classify:
+   - `has_creation_code: true` — a dedicated create function exists (in a service, repository,
+     or reusable helper). Record the file path and function name.
+   - `has_creation_code: false` — no dedicated creation function exists (only inline ORM calls
+     scattered across route handlers, or no create call at all in the codebase).
 
-5. Classify each model:
-   - `needs_factory: true` — creation path has side effects that raw SQL would miss
-   - `needs_factory: false` — simple CRUD, raw SQL INSERT is equivalent
-
-6. If a model has side effects but no dedicated service/repository file (e.g., inline creation
-   logic in a route handler), note that the logic exists but may need to be extracted into a
-   callable function for the factory to use.
+6. For models with `has_creation_code: true`, also note any side effects you observe (password
+   hashing, slug generation, external calls, etc.). This is **informational only** — the
+   classification is based on whether a function exists, not on what it does. Side effects help
+   the user understand *why* each factory matters.
 
 ## Output Format
 
@@ -69,42 +91,54 @@ Write `autonoma/entity-audit.md` with YAML frontmatter and markdown body.
 
 The YAML frontmatter MUST contain:
 - `model_count` — total number of models audited (integer)
-- `factory_count` — number of models that need factories (integer)
+- `factory_count` — number of models with `has_creation_code: true` (integer)
 - `models` — array of model entries, each with:
   - `name` — model name (string)
-  - `needs_factory` — whether it needs a factory (boolean)
-  - `reason` — why it does or does not need a factory (string)
-  - `creation_file` — path to the file containing creation logic (string, only if `needs_factory: true`)
-  - `creation_function` — name of the function/method (string, only if `needs_factory: true`)
-  - `side_effects` — array of strings describing each side effect (only if `needs_factory: true`)
+  - `has_creation_code` — whether a dedicated creation function exists (boolean)
+  - `reason` — one-line explanation of the classification (string)
+  - `creation_file` — path to the file containing creation logic (string, required when `has_creation_code: true`)
+  - `creation_function` — name of the function/method (string, required when `has_creation_code: true`)
+  - `side_effects` — array of strings describing observed side effects (optional, only when `has_creation_code: true`)
 
 Example:
+
 ```yaml
 ---
-model_count: 15
-factory_count: 4
+model_count: 12
+factory_count: 9
 models:
+  - name: "User"
+    has_creation_code: true
+    reason: "UserService.create() handles creation end-to-end"
+    creation_file: "src/users/users.service.ts"
+    creation_function: "create"
+    side_effects:
+      - "hashes password with bcrypt"
+      - "creates default UserSettings row"
   - name: "Organization"
-    needs_factory: true
-    reason: "Slug generation and default settings in OrganizationService.create()"
-    creation_file: "src/routes/organizations/organizations.service.ts"
+    has_creation_code: true
+    reason: "OrganizationService.create() is the canonical create path"
+    creation_file: "src/organizations/organizations.service.ts"
     creation_function: "create"
     side_effects:
       - "generates unique slug from name"
       - "creates default organization settings"
   - name: "ApiKey"
-    needs_factory: true
-    reason: "API key hashing via hashApiKey() before storage"
-    creation_file: "src/routes/api-keys/api-keys.service.ts"
+    has_creation_code: true
+    reason: "ApiKeyService.create() hashes the key before storage"
+    creation_file: "src/api-keys/api-keys.service.ts"
     creation_function: "create"
     side_effects:
-      - "hashes API key before storage"
+      - "hashes API key with sha256"
   - name: "Project"
-    needs_factory: false
-    reason: "Simple CRUD, no side effects in creation path"
-  - name: "Task"
-    needs_factory: false
-    reason: "Simple CRUD, no side effects in creation path"
+    has_creation_code: true
+    reason: "ProjectService.create() is a thin wrapper; future-proofs factory wiring"
+    creation_file: "src/projects/projects.service.ts"
+    creation_function: "create"
+    side_effects: []
+  - name: "Tag"
+    has_creation_code: false
+    reason: "No dedicated service; only inline prisma.tag.create() calls in route handlers"
 ---
 ```
 
@@ -112,23 +146,31 @@ models:
 
 After the frontmatter, write:
 
-#### Models Requiring Factories
+#### Models with Creation Code (will use factories)
 
-For each model with `needs_factory: true`, include:
+For each model with `has_creation_code: true`, include:
 - The model name as a heading
 - The creation file and function
-- The specific lines of code (or a summary) that cause the side effects
-- Why raw SQL INSERT would produce incorrect/incomplete data
+- A brief description of what the function does (including observed side effects, if any)
+- Why a factory is the right call (even for simple wrappers — "future-proofs against added business logic")
 
-#### Models Safe for Raw SQL
+#### Models without Creation Code (will use raw SQL)
 
-A simple list of models that don't need factories, grouped if there are many.
+A simple list of models that don't have dedicated creation code, with a note about where they're
+currently being created inline (if anywhere). If the user later extracts the logic into a
+service, this audit can be re-run and they'll automatically get factories.
 
 ## Important
 
-- Be thorough — missing a side effect means the Environment Factory will create broken test data
-- Read the ACTUAL creation code, don't guess from file names alone
-- If you can't find a dedicated creation function, check route handlers and controllers for inline logic
-- Common patterns to watch for: middleware that runs on create, database triggers (note these work with raw SQL too), ORM hooks/callbacks (beforeCreate, afterCreate)
-- ORM-level hooks (Prisma middleware, Sequelize hooks, ActiveRecord callbacks) are side effects — they run on ORM create but NOT on raw SQL
-- Database-level triggers are NOT side effects for this audit — they run on any INSERT including raw SQL
+- Be thorough — missing a creation function means the user has to manually wire it later
+- Read the ACTUAL code to locate creation functions — don't guess from file names alone
+- If a model has multiple creation paths (e.g., signup + admin-create), pick the canonical one
+  (usually the public API or most-called path) and note the alternative in the body
+- If creation logic is only inline in route handlers (no extracted function), mark
+  `has_creation_code: false` and note this in the body. The user can choose to extract it later.
+- Side effects are informational — they help the user understand why a factory matters, but
+  they do NOT affect classification
+- Database-level triggers run on raw SQL too, so they don't affect the audit
+- ORM-level hooks (Prisma middleware, Sequelize hooks, ActiveRecord callbacks) DO NOT run on
+  raw SQL. If a model relies on them, the user needs creation code or a factory that triggers
+  the hook path. Note this in the body so the user is aware.
