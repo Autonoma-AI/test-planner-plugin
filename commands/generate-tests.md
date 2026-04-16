@@ -31,20 +31,25 @@ echo "$AUTONOMA_ROOT" > /tmp/autonoma-project-root
 mkdir -p autonoma/skills autonoma/qa-tests
 ```
 
-Resolve and persist the documentation URL so every subagent uses the same source. This survives
-context compaction because it lives on disk.
+Persist the documentation URL so every subagent uses the same source. This survives
+context compaction because it lives on disk. `AUTONOMA_DOCS_URL` **must** be set — the
+onboarding command exports it for end users, and developers override it for local docs.
+There is no default; if it is missing, fail fast so the user can fix their env.
 
 ```bash
-DOCS_URL="${AUTONOMA_DOCS_URL:-https://docs.agent.autonoma.app}"
-echo "$DOCS_URL" > autonoma/.docs-url
-echo "Docs URL: $DOCS_URL"
+if [ -z "${AUTONOMA_DOCS_URL:-}" ]; then
+  echo "ERROR: AUTONOMA_DOCS_URL is not set. Re-launch Claude using the onboarding command from the Autonoma dashboard (it exports AUTONOMA_DOCS_URL for you), or export it manually before running this pipeline." >&2
+  exit 1
+fi
+echo "$AUTONOMA_DOCS_URL" > autonoma/.docs-url
+echo "Docs URL: $AUTONOMA_DOCS_URL"
 ```
 
 Read the environment variables. These are required for reporting progress back to Autonoma:
 - `AUTONOMA_API_KEY` — your Autonoma API key
 - `AUTONOMA_PROJECT_ID` — your Autonoma project ID
 - `AUTONOMA_API_URL` — Autonoma API base URL
-- `AUTONOMA_DOCS_URL` (optional) — documentation base URL. Defaults to `https://docs.agent.autonoma.app`. Override to point at a local docs server (e.g., `http://localhost:4321`) during SDK/docs development.
+- `AUTONOMA_DOCS_URL` (**required**) — documentation base URL. The onboarding command in the Autonoma dashboard exports this automatically. Override it to point at a local docs server during SDK/docs development.
 
 Before creating the record, derive a clean human-readable application name from the repository. Look at the git remote URL, the directory name, and any `package.json` / `pyproject.toml` / `README.md` to infer what the product is actually called. Prefer the product name over the repo slug (e.g. "My App" not "my-app-v2-final"). Store it in `APP_NAME`.
 
@@ -89,7 +94,7 @@ Spawn the `kb-generator` subagent with the following task:
 > app_name, app_description, core_flows (feature/description/core table), feature_count, and skill_count.
 > You MUST also write `autonoma/features.json` — a machine-readable inventory of every feature discovered.
 > It must have: features array (each with name, type, path, core), total_features, total_routes, total_api_routes.
-> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-1-knowledge-base.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
+> Fetch the latest instructions by running `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-1-knowledge-base.txt"` in the Bash tool first. If curl fails, stop and report — do not substitute any other URL.
 
 **After the subagent completes:**
 1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
@@ -163,7 +168,7 @@ Spawn the `entity-audit-generator` subagent with the following task:
 > as `side_effects` — informational only, they do NOT affect classification.
 > Output to `autonoma/entity-audit.md` with YAML frontmatter listing each model with name,
 > has_creation_code, reason, creation_file, creation_function, and optional side_effects.
-> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-2-entity-audit.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
+> Fetch the latest instructions by running `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-2-entity-audit.txt"` in the Bash tool first. If curl fails, stop and report — do not substitute any other URL.
 
 **After the subagent completes:**
 1. Verify `autonoma/entity-audit.md` exists and is non-empty
@@ -212,7 +217,7 @@ Spawn the `scenario-generator` subagent with the following task:
 > Read the knowledge base from `autonoma/AUTONOMA.md` and `autonoma/skills/`.
 > Generate test data scenarios. Write the output to `autonoma/scenarios.md`.
 > The file MUST have YAML frontmatter with scenario_count, scenarios summary, and entity_types.
-> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-2-scenarios.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
+> Fetch the latest instructions by running `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-2-scenarios.txt"` in the Bash tool first. If curl fails, stop and report — do not substitute any other URL.
 
 **After the subagent completes:**
 1. Verify `autonoma/scenarios.md` exists and is non-empty
@@ -265,8 +270,7 @@ Spawn the `env-factory-generator` subagent with the following task:
 > — no exceptions, even for thin wrappers. Models with `has_creation_code: false` use the SDK's
 > raw SQL fallback automatically (do not register factories for them). Validate the full up/down
 > lifecycle with curl before completing.
-> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement-scenarios.txt`
-> and `$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
+> Fetch the latest instructions by running `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement-scenarios.txt"` and `curl -sSfL "$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt"` in the Bash tool first. If either curl fails, stop and report — do not substitute any other URL.
 > Use AUTONOMA_SHARED_SECRET and AUTONOMA_SIGNING_SECRET as environment variable names.
 
 **After the subagent completes:**
@@ -319,7 +323,7 @@ Spawn the `test-case-generator` subagent with the following task:
 > You MUST create `autonoma/qa-tests/INDEX.md` with frontmatter containing total_tests,
 > total_folders, folder breakdown, and coverage_correlation.
 > Each test file MUST have frontmatter with title, description, criticality, scenario, and flow.
-> Fetch the latest instructions from `$(cat autonoma/.docs-url)/llms/test-planner/step-3-e2e-tests.txt` first. If the file `autonoma/.docs-url` is missing, fall back to `https://docs.agent.autonoma.app`.
+> Fetch the latest instructions by running `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-3-e2e-tests.txt"` in the Bash tool first. If curl fails, stop and report — do not substitute any other URL.
 > Note: The scenario data has been validated in Step 4 — the Environment Factory can create and tear down all entities.
 
 **After the subagent completes:**

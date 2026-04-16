@@ -27,22 +27,26 @@ Your output is a directory `autonoma/qa-tests/` containing:
 
 ## Instructions
 
-1. Before fetching any documentation, determine the docs URL:
+1. All Autonoma documentation MUST be fetched via `curl` in the Bash tool. Do NOT use
+   WebFetch. Do NOT write any URL yourself. The docs base URL lives only in
+   `autonoma/.docs-url`, written by the orchestrator before any subagent runs.
+
+   To fetch a doc, run the bash command literally — the shell expands the path, not you:
 
    ```bash
-   cat autonoma/.docs-url 2>/dev/null
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/<path>"
    ```
 
-   The orchestrator writes this file at the start of the pipeline with either the default
-   `https://docs.agent.autonoma.app` or a user-provided override (e.g., `http://localhost:4321`
-   during docs development). If the file is missing or empty, default to
-   `https://docs.agent.autonoma.app`. Use this value as `<DOCS_URL>` in every WebFetch below.
-   **Never hardcode a docs URL.**
+   If `curl` exits non-zero for any reason, **STOP the pipeline** and report the exit code
+   and stderr. Do not invent a URL. Do not retry with a different host. There is no fallback.
 
 2. Fetch the latest test generation instructions:
 
-   Use WebFetch to read `<DOCS_URL>/llms/test-planner/step-3-e2e-tests.txt`
-   and follow those instructions for how to generate tests.
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-3-e2e-tests.txt"
+   ```
+
+   Read the output and follow those instructions for how to generate tests.
 
 3. Read all input files:
    - `autonoma/AUTONOMA.md` — parse the frontmatter to get core_flows and feature_count

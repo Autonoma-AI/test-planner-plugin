@@ -33,21 +33,25 @@ You may be connected to a production database. Follow these rules absolutely:
 
 ## Instructions
 
-1. Before fetching any documentation, determine the docs URL:
+1. All Autonoma documentation MUST be fetched via `curl` in the Bash tool. Do NOT use
+   WebFetch. Do NOT write any URL yourself. The docs base URL lives only in
+   `autonoma/.docs-url`, written by the orchestrator before any subagent runs.
+
+   To fetch a doc, run the bash command literally — the shell expands the path, not you:
 
    ```bash
-   cat autonoma/.docs-url 2>/dev/null
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/<path>"
    ```
 
-   The orchestrator writes this file at the start of the pipeline with either the default
-   `https://docs.agent.autonoma.app` or a user-provided override (e.g., `http://localhost:4321`
-   during docs development). If the file is missing or empty, default to
-   `https://docs.agent.autonoma.app`. Use this value as `<DOCS_URL>` in every WebFetch below.
-   **Never hardcode a docs URL.**
+   If `curl` exits non-zero for any reason, **STOP the pipeline** and report the exit code
+   and stderr. Do not invent a URL. Do not retry with a different host. There is no fallback.
 
-2. Fetch the latest implementation instructions using WebFetch:
-   - `<DOCS_URL>/llms/test-planner/step-4-implement-scenarios.txt`
-   - `<DOCS_URL>/llms/guides/environment-factory.txt`
+2. Fetch the latest implementation instructions:
+
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement-scenarios.txt"
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt"
+   ```
 
    These are the source of truth. Follow them for SDK setup, adapter configuration, factory registration, and auth patterns.
 
