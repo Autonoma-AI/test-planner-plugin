@@ -19,6 +19,7 @@ maxTurns: 60
 You validate the planned scenarios against an already-working Autonoma SDK endpoint.
 Your inputs are `autonoma/discover.json`, `autonoma/scenarios.md`, and the existing backend behavior.
 Your output is `autonoma/scenario-recipes.json`.
+You MUST also leave a terminal artifact in `autonoma/.scenario-validation.json`.
 
 ## Goal
 
@@ -41,6 +42,7 @@ This step is validation-only. Your job is to:
 - Do NOT try to "fix" validation failures by changing the SDK contract.
 
 If validation fails, report the backend or recipe issue clearly and stop. Treat failures as integration or scenario issues, not coding tasks for this step.
+On failure, still write `autonoma/.scenario-validation.json` with `status: "failed"` and all blocking issues.
 
 ## Instructions
 
@@ -151,6 +153,8 @@ Rules:
 - every `{{token}}` in `create` must have a matching key in `variables`
 - every key in `variables` must be used in `create`
 - fully concrete recipes do not need `variables`
+- if the backend requires explicit scalar foreign-key values in addition to nested trees, include those scalar assignments using `_ref`-resolved values
+- any collision-prone unique value must be derived from `testRunId`
 
 Do not write the old shape. In particular, do not use:
 - top-level `generatedAt`
@@ -172,6 +176,28 @@ This requires:
 
 If preflight fails, do NOT rewrite backend code. Report the failure clearly and stop.
 
+Before returning, always write `autonoma/.scenario-validation.json` with this shape:
+
+```json
+{
+  "status": "ok",
+  "preflightPassed": true,
+  "smokeTestPassed": true,
+  "validatedScenarios": ["standard", "empty", "large"],
+  "failedScenarios": [],
+  "blockingIssues": [],
+  "recipePath": "autonoma/scenario-recipes.json",
+  "validationMode": "sdk-check",
+  "endpointUrl": "http://localhost:3000/api/autonoma"
+}
+```
+
+If the step fails, keep the same shape but set:
+- `status: "failed"`
+- `preflightPassed: false` when preflight did not pass
+- `failedScenarios` to the scenarios that failed
+- `blockingIssues` to the concrete validation/runtime blockers
+
 ## What to Explain to the User
 
 When finished, explain:
@@ -180,10 +206,12 @@ When finished, explain:
 3. whether `standard`, `empty`, and `large` validated successfully
 4. what validation method was used
 5. where `autonoma/scenario-recipes.json` was written
-6. any remaining manual deployment or backend issues that need attention
+6. where `autonoma/.scenario-validation.json` was written
+7. any remaining manual deployment or backend issues that need attention
 
 ## Important
 
 - Treat `discover.json` as the schema contract and `scenarios.md` as the scenario intent.
 - Assume SDK integration is already complete.
 - If the endpoint is down, tell the user to restart or redeploy the Step 1 integration instead of attempting code edits here.
+- The orchestrator must be able to trust `autonoma/.scenario-validation.json` as the only terminal-state signal for this step.

@@ -19,14 +19,15 @@ Inside any project with Claude Code:
 /autonoma-test-planner:generate-tests
 ```
 
-The plugin walks you through 5 steps and auto-runs by default. Set `AUTONOMA_REQUIRE_CONFIRMATION=true`
-if you want it to pause for review after Steps 1-4.
+The canonical launch mode is `AUTONOMA_AUTO_ADVANCE=true`, which keeps the plugin moving after
+Steps 1-4. If you are still using the older confirmation flag, `AUTONOMA_REQUIRE_CONFIRMATION=false`
+is treated as the same auto-advance behavior.
 
 ## Pipeline
 
 ### Step 1: SDK Integration
 
-Detects the project stack, installs the Autonoma SDK from package managers, wires the endpoint, ensures secrets exist, starts or reuses a local dev server, verifies signed `discover` / `up` / `down`, and writes `autonoma/.sdk-endpoint`.
+Detects the project stack, installs the Autonoma SDK from package managers, wires the endpoint, ensures secrets exist, starts or reuses a local dev server, verifies signed `discover` / `up` / `down`, and writes `autonoma/.sdk-endpoint` plus `autonoma/.sdk-integration.json`.
 
 It may also create a branch, commit the integration, and open a PR when `gh` is available.
 
@@ -52,18 +53,20 @@ Generates markdown test files in `autonoma/qa-tests/` plus `INDEX.md`.
 
 ### Step 5: Scenario Validation
 
-Validates `standard`, `empty`, and `large` against the live SDK endpoint, writes `autonoma/scenario-recipes.json`, runs endpoint preflight, and uploads the approved recipes to the setup API.
+Validates `standard`, `empty`, and `large` against the live SDK endpoint, writes `autonoma/scenario-recipes.json` plus `autonoma/.scenario-validation.json`, runs endpoint preflight, and uploads the approved recipes to the setup API only after all checks pass.
 
 This step does **not** implement backend code. It only validates the existing integration.
 
 ## Key Outputs
 
 - `autonoma/.sdk-endpoint`: validated SDK endpoint URL
+- `autonoma/.sdk-integration.json`: Step 1 machine-readable handoff
 - `autonoma/AUTONOMA.md`
 - `autonoma/features.json`
 - `autonoma/discover.json`
 - `autonoma/scenarios.md`
 - `autonoma/qa-tests/INDEX.md`
+- `autonoma/.scenario-validation.json`: Step 5 terminal-state artifact
 - `autonoma/scenario-recipes.json`
 
 ## Environment Variables
@@ -76,10 +79,16 @@ AUTONOMA_PROJECT_ID=<application id>
 AUTONOMA_API_URL=<setup api base url>
 ```
 
-Optional:
+Canonical:
 
 ```bash
-AUTONOMA_REQUIRE_CONFIRMATION=true
+AUTONOMA_AUTO_ADVANCE=true
+```
+
+Compatibility alias:
+
+```bash
+AUTONOMA_REQUIRE_CONFIRMATION=false
 ```
 
 You no longer need to pre-provide `AUTONOMA_SDK_ENDPOINT` or `AUTONOMA_SHARED_SECRET`. Step 1 creates or discovers them in the target project.
@@ -103,7 +112,9 @@ Every pipeline output is validated by shell-dispatched Python validators.
 | `features.json` | feature inventory schema |
 | `discover.json` | SDK discover schema |
 | `.sdk-endpoint` | absolute `http` or `https` URL |
+| `.sdk-integration.json` | Step 1 handoff contract |
 | `scenarios.md` | scenario schema and required sections |
+| `.scenario-validation.json` | Step 5 terminal-state contract |
 | `scenario-recipes.json` | recipe schema plus live endpoint preflight |
 | `INDEX.md` | test totals and folder breakdown |
 | test files | required frontmatter |

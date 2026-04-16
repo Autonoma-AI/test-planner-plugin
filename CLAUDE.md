@@ -30,8 +30,8 @@ tests/
 4. E2E Tests
 5. Scenario Validation
 
-Steps 1-4 auto-run by default. Set `AUTONOMA_REQUIRE_CONFIRMATION=true` if you want the plugin to
-pause for review between stages. Step 5 is final.
+The canonical launch mode is `AUTONOMA_AUTO_ADVANCE=true`. If you are still using the older flag,
+`AUTONOMA_REQUIRE_CONFIRMATION=false` is treated as the same auto-advance behavior. Step 5 is final.
 
 ## Validation
 
@@ -42,8 +42,10 @@ Validators are in `hooks/validators/`.
 | `validate_kb.py` | `*/autonoma/AUTONOMA.md` | app_name, app_description, core_flows |
 | `validate_discover.py` | `*/autonoma/discover.json` | schema object, models, edges, relations, scopeField |
 | `validate_sdk_endpoint.py` | `*/autonoma/.sdk-endpoint` | absolute http/https URL |
+| `validate_sdk_integration.py` | `*/autonoma/.sdk-integration.json` | Step 1 handoff contract |
 | `validate_features.py` | `*/autonoma/features.json` | feature inventory schema |
 | `validate_scenarios.py` | `*/autonoma/scenarios.md` | scenario count and metadata |
+| `validate_scenario_validation.py` | `*/autonoma/.scenario-validation.json` | Step 5 terminal-state contract |
 | `validate_scenario_recipes.py` | `*/autonoma/scenario-recipes.json` | recipe schema |
 | `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | test totals and folder sums |
 | `validate_test_file.py` | `*/autonoma/qa-tests/*/[!I]*.md` | test frontmatter |

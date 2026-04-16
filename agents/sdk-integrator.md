@@ -33,6 +33,8 @@ The SDK reference repo path is provided by the orchestrator in `/tmp/autonoma-sd
 - Keep integration changes minimal and aligned with the project's existing conventions.
 - Do NOT commit `.env`.
 - Do NOT commit anything under `autonoma/`.
+- You MUST leave a machine-readable terminal artifact in `autonoma/.sdk-integration.json` whether the step succeeds or fails.
+- Do NOT report success unless both `autonoma/.sdk-endpoint` and `autonoma/.sdk-integration.json` have been written.
 
 ## Required Order
 
@@ -176,7 +178,50 @@ autonoma/.sdk-endpoint
 
 The file must contain only one absolute URL.
 
-### 12. Commit only integration changes
+### 12. Write the integration handoff artifact
+
+Write `autonoma/.sdk-integration.json` with this shape:
+
+```json
+{
+  "status": "ok",
+  "endpointUrl": "http://localhost:3000/api/autonoma",
+  "endpointPath": "/api/autonoma",
+  "stack": {
+    "language": "TypeScript",
+    "framework": "Express",
+    "orm": "Prisma",
+    "packageManager": "pnpm"
+  },
+  "packagesInstalled": ["@autonoma-ai/sdk", "@autonoma-ai/sdk-prisma"],
+  "sharedSecretPresent": true,
+  "signingSecretPresent": true,
+  "devServer": {
+    "startedByPlugin": true,
+    "pid": 12345
+  },
+  "verification": {
+    "discover": { "status": "ok", "validatedByPlugin": true },
+    "up": { "status": "ok" },
+    "down": { "status": "ok" }
+  },
+  "branch": {
+    "name": "autonoma/feat-autonoma-sdk"
+  },
+  "pr": {
+    "url": "https://github.com/..."
+  },
+  "blockingIssues": []
+}
+```
+
+If the step fails after doing any work, still write `autonoma/.sdk-integration.json` with:
+- `status: "failed"`
+- the best known values for stack, endpoint, server pid, and branch
+- failed verification statuses
+- every blocking issue listed in `blockingIssues`
+
+### 13. Commit only integration changes
 
 Stage only the SDK integration changes, such as:
 - route or handler files
@@ -194,7 +239,7 @@ Commit message:
 feat: integrate autonoma sdk
 ```
 
-### 13. Create a PR when possible
+### 14. Create a PR when possible
 
 If `gh` is available:
 - push the branch
@@ -208,7 +253,7 @@ Co-authored-by: Autonoma <noreply@autonoma.app>
 
 If `gh` is unavailable, report the exact manual next steps instead.
 
-### 14. Final report
+### 15. Final report
 
 Explain:
 1. detected stack
@@ -217,9 +262,11 @@ Explain:
 4. where secrets were added
 5. dev server PID
 6. PR URL or manual push/PR steps
+7. where `autonoma/.sdk-endpoint` and `autonoma/.sdk-integration.json` were written
 
 ## Verification Notes
 
 - Use the SDK reference repo in `/tmp/autonoma-sdk-ref-dir` only for examples and package-selection guidance.
 - Prefer existing project conventions over generic examples when file placement differs.
 - If the project already contains a partial SDK integration, extend it rather than replacing it.
+- If lifecycle verification passes but artifact writing fails, the step is still incomplete.

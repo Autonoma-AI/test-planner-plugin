@@ -38,8 +38,9 @@ The plugin itself requires these values in the target project session:
 You do **not** need to pre-set `AUTONOMA_SDK_ENDPOINT`, `AUTONOMA_SHARED_SECRET`, or `AUTONOMA_SIGNING_SECRET`.
 Step 1 creates or discovers those values in the target repo by editing `.env` and `.env.example`.
 
-If you want the pipeline to pause for review after Steps 1-4 while testing, set
-`AUTONOMA_REQUIRE_CONFIRMATION=true` in the Claude Code session.
+Use `AUTONOMA_AUTO_ADVANCE=true` as the canonical launch mode while testing. If you are still using
+the older confirmation flag, `AUTONOMA_REQUIRE_CONFIRMATION=false` is treated as the same
+auto-advance behavior.
 
 After the generated PR is merged, the user still needs to deploy those env changes.
 
