@@ -72,4 +72,40 @@ curl -sf -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
 
 touch autonoma/.step-0-started
 
+# ---------------------------------------------------------------------------
+# Launch the transcript streamer as a detached background daemon. It tails
+# the session JSONL and forwards assistant text/thinking/tool-use/tool-result
+# events to /v1/setup/setups/{id}/events so the dashboard can render a live
+# activity log. Best-effort, never blocks.
+# ---------------------------------------------------------------------------
+TRANSCRIPT_PATH=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transcript_path',''))" 2>/dev/null || echo '')
+
+if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+  STREAMER_PID_FILE="autonoma/.streamer.pid"
+  STREAMER_LOG="autonoma/.streamer.log"
+  STREAMER_SCRIPT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$0")/..}/hooks/transcript-streamer.py"
+
+  # If a prior streamer is still alive (e.g. from a previous session in this
+  # project dir), replace it — the transcript path has changed.
+  if [ -s "$STREAMER_PID_FILE" ]; then
+    existing_pid=$(cat "$STREAMER_PID_FILE" 2>/dev/null || echo '')
+    if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
+      kill "$existing_pid" 2>/dev/null || true
+    fi
+  fi
+
+  if [ -f "$STREAMER_SCRIPT" ]; then
+    nohup python3 "$STREAMER_SCRIPT" \
+      "$TRANSCRIPT_PATH" \
+      "$GENERATION_ID" \
+      "$AUTONOMA_API_URL" \
+      "$AUTONOMA_API_KEY" \
+      >> "$STREAMER_LOG" 2>&1 </dev/null &
+    STREAMER_PID=$!
+    echo "$STREAMER_PID" > "$STREAMER_PID_FILE"
+    disown "$STREAMER_PID" 2>/dev/null || true
+    echo "[autonoma pipeline-kickoff] Transcript streamer started. pid=${STREAMER_PID} transcript=${TRANSCRIPT_PATH}" >&2
+  fi
+fi
+
 exit 0
