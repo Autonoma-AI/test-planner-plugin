@@ -22,6 +22,25 @@ UI prompt that makes it clear the user needs to respond before the pipeline cont
 After calling `AskUserQuestion`, wait for the user's response.
 Only proceed to the next step after they confirm.
 
+## How lifecycle reporting works
+
+You do NOT issue `curl` commands to report step start/complete/uploads. That is handled
+automatically by plugin hooks:
+
+- The `UserPromptSubmit` hook (`pipeline-kickoff.sh`) runs when the user invokes
+  `/generate-tests`. It creates the setup record, writes `autonoma/.generation-id` and
+  `autonoma/.docs-url`, and emits `step.started` for step 0.
+- The `PostToolUse` hook (`validate-pipeline-output.sh`) runs after every `Write`. It
+  validates output files, emits `step.completed` + `step.started` for the next step,
+  and uploads artifacts (skills after step 1, test cases after step 5). Idempotent —
+  each transition fires at most once per generation.
+- The env-factory agent (step 4) writes a sentinel file `autonoma/.env-factory-validated`
+  after it finishes validating the up/down lifecycle. The hook sees that file and emits
+  `step.completed` for step 3 and `step.started` for step 4.
+
+Your job is to spawn subagents and gate between them with `AskUserQuestion`. Reporting is
+hook territory — do not duplicate it.
+
 ## Before Starting
 
 Create the output directory:
@@ -29,50 +48,10 @@ Create the output directory:
 mkdir -p autonoma/skills autonoma/qa-tests
 ```
 
-Persist the documentation URL so every subagent uses the same source. This survives
-context compaction because it lives on disk. `AUTONOMA_DOCS_URL` **must** be set — the
-onboarding command exports it for end users, and developers override it for local docs.
-There is no default; if it is missing, fail fast so the user can fix their env.
-
-```bash
-if [ -z "${AUTONOMA_DOCS_URL:-}" ]; then
-  echo "ERROR: AUTONOMA_DOCS_URL is not set. Re-launch Claude using the onboarding command from the Autonoma dashboard (it exports AUTONOMA_DOCS_URL for you), or export it manually before running this pipeline." >&2
-  exit 1
-fi
-echo "$AUTONOMA_DOCS_URL" > autonoma/.docs-url
-echo "Docs URL: $AUTONOMA_DOCS_URL"
-```
-
-Read the environment variables. These are required for reporting progress back to Autonoma:
-- `AUTONOMA_API_KEY` — your Autonoma API key
-- `AUTONOMA_PROJECT_ID` — your Autonoma project ID
-- `AUTONOMA_API_URL` — Autonoma API base URL
-- `AUTONOMA_DOCS_URL` (**required**) — documentation base URL. The onboarding command in the Autonoma dashboard exports this automatically. Override it to point at a local docs server during SDK/docs development.
-
-Create the generation record so the dashboard can track progress in real time:
-```bash
-RESPONSE=$(curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d "{\"applicationId\":\"${AUTONOMA_PROJECT_ID}\"}" 2>/dev/null || echo '{}')
-GENERATION_ID=$(echo "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo '')
-mkdir -p autonoma
-echo "$GENERATION_ID" > autonoma/.generation-id
-echo "Generation ID: $GENERATION_ID"
-```
-
-If `GENERATION_ID` is empty, continue anyway — reporting is best-effort and must never block test generation.
+The kickoff hook has already written `autonoma/.docs-url` and `autonoma/.generation-id`.
+Subagents read the docs URL from that file; you don't need to pass it through.
 
 ## Step 1: Generate Knowledge Base
-
-Report step start:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":0,"name":"Knowledge Base"}}' 2>/dev/null || true
-```
 
 Spawn the `kb-generator` subagent with the following task:
 
@@ -85,48 +64,14 @@ Spawn the `kb-generator` subagent with the following task:
 
 **After the subagent completes:**
 1. Verify `autonoma/AUTONOMA.md` and `autonoma/features.json` exist and are non-empty
-2. The PostToolUse hook will have validated the frontmatter and features.json schema automatically
+2. The PostToolUse hook will have validated the frontmatter and features.json schema automatically, emitted step 0 completed + step 1 started, and uploaded the generated skills
 3. Read the file and present the frontmatter to the user — specifically the core_flows table
-
-Report step complete and upload skills:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":0,"name":"Knowledge Base"}}' 2>/dev/null || true
-
-[ -n "$GENERATION_ID" ] && python3 -c "
-import os, json
-skills = []
-d = 'autonoma/skills'
-if os.path.isdir(d):
-    for f in os.listdir(d):
-        if f.endswith('.md'):
-            with open(os.path.join(d, f)) as fh:
-                skills.append({'name': f, 'content': fh.read()})
-print(json.dumps({'skills': skills}))
-" | curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/artifacts" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d @- 2>/dev/null || true
-```
-
 4. Call `AskUserQuestion` with:
    - question: "Does this core flows table look correct? These flows determine how the test budget is distributed."
    - options: ["Yes, proceed to Step 2", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
 
 ## Step 2: Entity Creation Audit
-
-Report step start:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":1,"name":"Entity Audit"}}' 2>/dev/null || true
-```
 
 Spawn the `entity-audit-generator` subagent with the following task:
 
@@ -144,33 +89,14 @@ Spawn the `entity-audit-generator` subagent with the following task:
 
 **After the subagent completes:**
 1. Verify `autonoma/entity-audit.md` exists and is non-empty
-2. The PostToolUse hook will have validated the frontmatter schema automatically (model_count, factory_count, models array with name/has_creation_code/reason/creation_file/creation_function/side_effects)
+2. The PostToolUse hook will have validated the frontmatter schema automatically and emitted step 1 completed + step 2 started
 3. Read the file and present the frontmatter to the user — specifically which models have creation code (and will get factories) and which will fall back to raw SQL
-
-Report step complete:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":1,"name":"Entity Audit"}}' 2>/dev/null || true
-```
-
 4. Call `AskUserQuestion` with:
    - question: "Does this entity audit look correct? Models with `has_creation_code: true` will get factories that call your real create function. Models with `has_creation_code: false` will use raw SQL INSERT."
    - options: ["Yes, proceed to Step 3", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
 
 ## Step 3: Generate Scenarios
-
-Report step start:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":2,"name":"Scenarios"}}' 2>/dev/null || true
-```
 
 Spawn the `scenario-generator` subagent with the following task:
 
@@ -181,35 +107,14 @@ Spawn the `scenario-generator` subagent with the following task:
 
 **After the subagent completes:**
 1. Verify `autonoma/scenarios.md` exists and is non-empty
-2. The PostToolUse hook will have validated the frontmatter format automatically
+2. The PostToolUse hook will have validated the frontmatter format automatically and emitted step 2 completed + step 3 started
 3. Read the file and present the frontmatter summary to the user — scenario names, entity counts, entity types
-
-Report step complete:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":2,"name":"Scenarios"}}' 2>/dev/null || true
-```
-
 4. Call `AskUserQuestion` with:
    - question: "Do these scenarios look correct? The standard scenario data becomes hard assertions in your tests."
    - options: ["Yes, proceed to Step 4 (implement scenarios)", "I want to suggest changes"]
 5. Wait for the user's response before proceeding.
 
 ## Step 4: Implement & Validate Environment Factory
-
-Report step start:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":3,"name":"Environment Factory"}}' 2>/dev/null || true
-```
-
-Log: "Installing Autonoma SDK and validating scenario lifecycle..."
 
 Spawn the `env-factory-generator` subagent with the following task:
 
@@ -219,41 +124,23 @@ Spawn the `env-factory-generator` subagent with the following task:
 > in the audit, register a factory that calls the audit's identified `creation_file` / `creation_function`
 > — no exceptions, even for thin wrappers. Models with `has_creation_code: false` use the SDK's
 > raw SQL fallback automatically (do not register factories for them). Validate the full up/down
-> lifecycle with curl before completing.
+> lifecycle with curl before completing. **After validation passes, write the sentinel file
+> `autonoma/.env-factory-validated`** — the plugin hook watches for that file and uses it to
+> mark step 3 complete.
 > Fetch the latest instructions by running `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement-scenarios.txt"` and `curl -sSfL "$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt"` in the Bash tool first. If either curl fails, stop and report — do not substitute any other URL.
 > Use AUTONOMA_SHARED_SECRET and AUTONOMA_SIGNING_SECRET as environment variable names.
 
 **After the subagent completes:**
 1. Verify the endpoint was created and the lifecycle was validated
-2. Present the results to the user — what was implemented, where, validation results
-3. Report any issues that need manual attention
-
-Report step complete:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":3,"name":"Environment Factory"}}' 2>/dev/null || true
-```
-
-4. Call `AskUserQuestion` with:
+2. Verify `autonoma/.env-factory-validated` exists — if it doesn't, validation didn't pass and you must not proceed
+3. The PostToolUse hook will have emitted step 3 completed + step 4 started when the sentinel was written
+4. Present the results to the user — what was implemented, where, validation results
+5. Call `AskUserQuestion` with:
    - question: "The Environment Factory is set up and the scenario lifecycle has been validated. Does everything look correct?"
    - options: ["Yes, proceed to Step 5 (generate tests)", "I want to suggest changes"]
-5. Wait for the user's response before proceeding.
+6. Wait for the user's response before proceeding.
 
 ## Step 5: Generate E2E Test Cases
-
-Report step start:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.started","data":{"step":4,"name":"E2E Tests"}}' 2>/dev/null || true
-```
-
-Log: "Generating E2E test cases from knowledge base and validated scenarios..."
 
 Spawn the `test-case-generator` subagent with the following task:
 
@@ -268,37 +155,8 @@ Spawn the `test-case-generator` subagent with the following task:
 
 **After the subagent completes:**
 1. Verify `autonoma/qa-tests/INDEX.md` exists and is non-empty
-2. The PostToolUse hook will have validated the INDEX frontmatter and individual test file frontmatter
+2. The PostToolUse hook will have validated the INDEX frontmatter, individual test file frontmatter, emitted step 4 completed, and uploaded the test cases to the dashboard
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
-
-Report step complete and upload test cases:
-```bash
-GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
-[ -n "$GENERATION_ID" ] && curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/events" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"step.completed","data":{"step":4,"name":"E2E Tests"}}' 2>/dev/null || true
-
-[ -n "$GENERATION_ID" ] && python3 -c "
-import os, json
-test_cases = []
-for root, dirs, files in os.walk('autonoma/qa-tests'):
-    for f in files:
-        if f.endswith('.md') and f != 'INDEX.md':
-            path = os.path.join(root, f)
-            folder = os.path.relpath(root, 'autonoma/qa-tests')
-            with open(path) as fh:
-                content = fh.read()
-            entry = {'name': f, 'content': content}
-            if folder != '.':
-                entry['folder'] = folder
-            test_cases.append(entry)
-print(json.dumps({'testCases': test_cases}))
-" | curl -sf -X POST "${AUTONOMA_API_URL}/v1/generation/generations/${GENERATION_ID}/artifacts" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d @- 2>/dev/null || true
-```
 
 ## Completion
 
