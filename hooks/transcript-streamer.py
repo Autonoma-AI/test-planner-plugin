@@ -14,6 +14,8 @@ Usage:
   python3 transcript-streamer.py <transcript_path> <generation_id> <api_url> <api_key>
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sys
