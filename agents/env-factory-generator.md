@@ -232,15 +232,25 @@ If any test fails, fix the implementation and re-test.
 ## CRITICAL: Write the validation sentinel
 
 **Only after every lifecycle step above has passed** (discover OK, up OK, data verified,
-down OK, cleanup verified, auth OK), write the sentinel file the orchestrator hook watches:
+down OK, cleanup verified, auth OK), create the sentinel file the orchestrator hook watches.
 
-```bash
-touch autonoma/.env-factory-validated
+**Use the `Write` tool** to create `autonoma/.env-factory-validated`. Do NOT use `touch`
+or any other Bash command — the plugin's PostToolUse hook only fires on `Write`/`Edit`, so
+a Bash `touch` will silently skip the step 3→4 transition and leave the dashboard stuck.
+
+The file body should be a short plain-text summary of what you validated, e.g.:
+
+```
+Environment Factory validation passed.
+- discover: 8 models, 12 edges, scopeField=organizationId
+- up(standard): created 14 records across 5 models, refsToken issued
+- data verified via read-only SELECT
+- down: 14 records removed, cleanup verified
+- auth test: authenticated request returned 200
 ```
 
-This is how the plugin knows step 3 is complete and step 4 can begin. Do NOT write this
-file if any validation step failed, and do NOT write it before validation — it is the
-pipeline's only signal that the Environment Factory actually works.
+Do NOT write this file if any validation step failed, and do NOT write it before validation —
+it is the pipeline's only signal that the Environment Factory actually works.
 
 ## What to Explain to the User
 
