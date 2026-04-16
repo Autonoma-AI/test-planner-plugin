@@ -14,6 +14,39 @@ GENERATION_ID=$(cat autonoma/.generation-id 2>/dev/null || echo '')
 [ -z "${AUTONOMA_API_URL:-}" ] && exit 0
 [ -z "${AUTONOMA_API_KEY:-}" ] && exit 0
 
+# ---------------------------------------------------------------------------
+# Streamer liveness check + auto-revive. If the transcript streamer daemon
+# has died (crash, OS restart, etc.) re-launch it so the dashboard keeps
+# receiving events. kill -0 is nearly free when the process is alive.
+# Skipped when the plugin's streamer.py is missing (e.g. older plugin cache).
+# ---------------------------------------------------------------------------
+STREAMER_PID_FILE="autonoma/.streamer.pid"
+STREAMER_LOG="autonoma/.streamer.log"
+STREAMER_SCRIPT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$0")/..}/hooks/transcript-streamer.py"
+
+streamer_alive() {
+  [ -s "$STREAMER_PID_FILE" ] || return 1
+  local pid
+  pid=$(cat "$STREAMER_PID_FILE" 2>/dev/null)
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+if ! streamer_alive && [ -f "$STREAMER_SCRIPT" ]; then
+  TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transcript_path',''))" 2>/dev/null || echo '')
+  if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    nohup python3 "$STREAMER_SCRIPT" \
+      "$TRANSCRIPT_PATH" \
+      "$GENERATION_ID" \
+      "$AUTONOMA_API_URL" \
+      "$AUTONOMA_API_KEY" \
+      >> "$STREAMER_LOG" 2>&1 </dev/null &
+    NEW_PID=$!
+    echo "$NEW_PID" > "$STREAMER_PID_FILE"
+    disown "$NEW_PID" 2>/dev/null || true
+    echo "[$(date +%H:%M:%S)] streamer revived by pretool-heartbeat pid=$NEW_PID transcript=$TRANSCRIPT_PATH" >> "$STREAMER_LOG"
+  fi
+fi
+
 # Build the payload: tool name + a short preview of the most informative arg.
 # Heavy args (full file contents from Write/Edit) are never forwarded.
 PAYLOAD=$(printf '%s' "$INPUT" | python3 -c "
