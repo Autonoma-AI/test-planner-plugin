@@ -162,6 +162,55 @@ For every entry in entity-audit.md with `has_creation_code: true`:
 - In `create`: call the imported function with the resolved data and return at least `{ id }` (the primary key)
 - Optionally define `teardown` for custom cleanup (SQL DELETE is the default)
 
+#### The one thing you MUST NOT do
+
+Do not re-implement the creation logic inline using the ORM, even if calling the real function
+is inconvenient (constructor arguments, DI containers, weird signatures). The entire point of
+the factory is to stay on the user's code path so that when they add business logic later —
+password hashing, audit logs, Stripe sync, state-machine transitions — the test data gets it
+for free. Inline ORM calls bypass all of that silently and are the #1 bug source in generated
+factories.
+
+**WRONG — re-implementing creation logic inline (this is the trap):**
+
+```ts
+// entity-audit.md said: creation_function = OnboardingManager.getState
+OnboardingState: defineFactory({
+  create: async (data) => {
+    // Bypasses OnboardingManager entirely. If the user adds logic later, tests silently diverge.
+    return db.onboardingState.create({ data: { applicationId: data.applicationId, step: "welcome" } });
+  },
+}),
+```
+
+**RIGHT — call the audit's identified function, even if you have to instantiate a class:**
+
+```ts
+import { OnboardingManager } from "@/lib/onboarding-manager";
+
+OnboardingState: defineFactory({
+  create: async (data, ctx) => {
+    // Uses the real code path. Any business logic added later flows through automatically.
+    const manager = new OnboardingManager(ctx.executor);
+    return manager.getState(data.applicationId);
+  },
+}),
+```
+
+#### How to instantiate wrapper classes
+
+If `creation_function` is a method on a class (service, manager, repository), you need an
+instance. Use the SDK's factory context — it carries the shared DB executor you should pass
+into the constructor:
+
+- `ctx.executor` — the DB client/transaction the SDK is using for this `up` call. Pass this
+  into constructors that take `db`/`tx`/`client`/`prisma`/`drizzle`. Using it keeps factory
+  writes inside the same transaction as the rest of the `up` operation.
+- If the class needs more than a DB client (e.g. a logger, event bus, config), import the
+  real instances the app already constructs. Don't mock them — the whole point is to run
+  the real code path.
+- If the class is a singleton exported from a module, import it directly and call the method.
+
 If a creation function has a non-standard signature (e.g., takes a context object, or returns
 a non-standard shape), adapt the factory to bridge the gap — but do NOT reimplement the logic.
 Always call the user's function.
@@ -229,10 +278,40 @@ After implementing, you MUST validate the full lifecycle. This is the gate — d
 
 If any test fails, fix the implementation and re-test.
 
+## CRITICAL: Factory-integrity check (run before writing the sentinel)
+
+Before writing the validation sentinel, prove that every factory you registered actually
+calls the audit's identified `creation_function`. This is a deterministic check, not a vibe:
+
+1. Parse `autonoma/entity-audit.md` and list every model with `has_creation_code: true` along
+   with its `creation_file` and `creation_function`.
+2. For each such model, open the handler file(s) you wrote and verify BOTH:
+   - An `import` (or `require`) line pulls in `creation_function` (or the class that owns it)
+     from a path that resolves to `creation_file`.
+   - Inside that model's `defineFactory({ create })` body, the identified symbol is actually
+     invoked (e.g. `manager.getState(...)`, `createUser(...)`, `ProjectService.create(...)`).
+3. If either check fails for any model — import missing, or the factory body only touches the
+   raw ORM (`db.x.create`, `prisma.x.create`, `tx.insert(...)`, etc.) — the factory is
+   re-implementing logic instead of calling it. **STOP**, fix the factory to call the real
+   function (see the WRONG/RIGHT example above), and re-run validation before proceeding.
+
+A quick way to spot the anti-pattern on Prisma projects:
+
+```bash
+grep -nE '(prisma|db|tx)\.[a-zA-Z]+\.create\(' <your-handler-file> || echo "no inline ORM creates — good"
+```
+
+Every match on that grep is a candidate for the trap. Cross-reference each against the audit:
+if the same model has `has_creation_code: true`, you need to replace the inline call with
+the real function.
+
+Do NOT write the sentinel below until this check passes for every model in the audit.
+
 ## CRITICAL: Write the validation sentinel
 
 **Only after every lifecycle step above has passed** (discover OK, up OK, data verified,
-down OK, cleanup verified, auth OK), create the sentinel file the orchestrator hook watches.
+down OK, cleanup verified, auth OK) **and the factory-integrity check passes**, create the
+sentinel file the orchestrator hook watches.
 
 **Use the `Write` tool** to create `autonoma/.env-factory-validated`. Do NOT use `touch`
 or any other Bash command — the plugin's PostToolUse hook only fires on `Write`/`Edit`, so
