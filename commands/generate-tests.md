@@ -68,7 +68,7 @@ Spawn `scenario-generator`:
 > runs (globally unique, time-sensitive, backend-generated, or when the app lacks natural
 > per-run isolation). Design entity tables so they serialise as nested trees rooted at the
 > scope entity.
-> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-2-scenarios.txt"`.
+> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-3-scenarios.txt"`.
 
 After completion: present scenarios, `AskUserQuestion`, `Write` `autonoma/.step-3-ack`.
 
@@ -82,7 +82,7 @@ Spawn `env-factory-generator`:
 > using the app's real session/token creation. Run a `discover` smoke test. Run the factory-integrity
 > check. Then `Write` `autonoma/.endpoint-implemented` with a short summary. Do NOT run `up`/`down`
 > — that is step 5.
-> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement-scenarios.txt"`
+> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-4-implement.txt"`
 > and `curl -sSfL "$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt"`.
 > Use `AUTONOMA_SHARED_SECRET` and `AUTONOMA_SIGNING_SECRET` as env var names.
 
@@ -103,6 +103,7 @@ Spawn `scenario-validator`:
 > `autonoma/.scenario-validation.json` as the terminal artifact. Then `Write`
 > `autonoma/.endpoint-validated`. If you hit the iteration cap OR preflight fails, STOP and
 > report — do NOT write the sentinel.
+> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-5-validate.txt"`.
 > Verify: every audited model appears in `discover.schema.models`, every `has_creation_code`
 > model has a registered factory, `auth` is non-empty, DB state is correct before and after
 > `down`, and preflight exits 0.
@@ -171,7 +172,7 @@ Spawn `test-case-generator`:
 > Generate test cases in `autonoma/qa-tests/`. Write `autonoma/qa-tests/INDEX.md` with
 > frontmatter (total_tests, total_folders, folder breakdown, coverage_correlation). Each test
 > file needs frontmatter (title, description, criticality, scenario, flow).
-> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-3-e2e-tests.txt"`.
+> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-6-e2e-tests.txt"`.
 
 After completion:
 1. Verify `autonoma/qa-tests/INDEX.md` exists
