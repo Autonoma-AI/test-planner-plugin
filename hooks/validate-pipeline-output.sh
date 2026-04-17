@@ -130,6 +130,16 @@ STEP_NAMES=("Knowledge Base" "Entity Audit" "Scenarios" "Implement" "Validate" "
 
 case "$FILE_PATH" in
   */autonoma/.endpoint-implemented)
+    # Hook-level factory-integrity gate. The env-factory agent's self-policed
+    # check has proven insufficient — see the post-mortem in the plugin repo.
+    # This validator parses autonoma/entity-audit.md, opens the handler named
+    # in the sentinel body, and blocks the write when any factory for a
+    # has_creation_code: true model contains an inline ORM write.
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    if ! OUTPUT=$(python3 "$SCRIPT_DIR/validators/validate_endpoint_implemented.py" "$FILE_PATH" 2>&1); then
+      printf '%s\n' "$OUTPUT" >&2
+      exit 2
+    fi
     emit_step_event 3 completed "Implement"
     exit 0
     ;;

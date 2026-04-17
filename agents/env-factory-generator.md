@@ -110,6 +110,73 @@ that logic — it's always a compatibility risk.
 Models with `has_creation_code: false` fall back to the SDK's raw SQL path. That's safe because
 the audit explicitly determined there's no creation logic to preserve.
 
+## Research pass — MANDATORY before writing any factory
+
+Post-mortems of past runs show a consistent failure mode: the agent makes **one bad
+decision and applies it 50 times**. The research pass prevents this by forcing you to
+open every relevant file and document a per-model decision *before* touching the handler.
+
+Write a table to `autonoma/.factory-plan.md` with one row per `has_creation_code: true`
+model in the audit. Fill EVERY cell — do not leave any as TODO. The orchestrator and
+the user will review this table before you write a single factory.
+
+```
+| Model | Audit function | File opened? | Import path | DI dependencies observed | Decision (Branch 1/2/3) | Notes |
+|-------|----------------|--------------|-------------|--------------------------|-------------------------|-------|
+```
+
+Column rules:
+
+- **File opened?** — "yes, lines X-Y" or "no, why". If you write "no", you MUST NOT
+  proceed. You cannot decide Branch 1 vs Branch 2 without reading the file.
+- **Import path** — the exact `import ... from "..."` statement you will add to the
+  handler. If the symbol is inline in a hook/route (Branch 1), this column holds the
+  *new* export path you will create during extraction, not the current inline location.
+- **DI dependencies observed** — every constructor arg or closed-over variable the
+  function uses. `ctx.executor` for a DB-only service is the trivial case; any logger,
+  event bus, Temporal client, analytics client, etc. must be listed. This is where
+  past agents gave up silently — we want the give-up moment to be visible.
+- **Decision** — Branch 1 (extract inline → export → call), Branch 2 (import existing
+  export → call), or Branch 3 (audit is wrong, argue why). "Inline ORM" is NOT a valid
+  decision.
+
+### Cross-codebase DI discovery
+
+Before filling the table, run these greps against the backend to find real
+instantiation patterns. The agent debrief identified this as the single actionable
+guidance past runs were missing:
+
+```bash
+# Find how each service is actually constructed in production code.
+grep -rnE "new ${ServiceName}\(" apps/ --include='*.ts' --include='*.tsx' | head -20
+# Find exported singletons and module-level instances.
+grep -rnE "^(export )?(const|let) [a-zA-Z]+ = new " apps/ --include='*.ts' | head -40
+# Find composition root candidates.
+grep -rnlE "(container|registry|services/index|app\.module)" apps/ | head
+```
+
+Use the results to fill the "DI dependencies observed" column honestly. If a service
+needs `logger, eventBus, temporal, analytics` and you can't find where the app wires
+them, STOP and ask the user — do NOT fall back to raw ORM.
+
+### External-side-effects policy reminder
+
+When the creation function triggers Temporal / GitHub / analytics / BetterAuth hooks,
+you are NOT allowed to skip the function. You must either:
+1. Call the real function and let the test-mode toggle handle it (grep for
+   `process.env.NODE_ENV === "test"`, `AUTONOMA_TEST_MODE`, `DISABLE_*`, or similar).
+2. Call the real function and let external calls fail gracefully — most SDKs throw,
+   which is fine if the DB writes complete first.
+3. Wrap the external call with a try/catch **inside the real function**, not inside
+   the factory.
+
+Never replicate DB writes the function performs. If the real function writes to
+sibling tables (Organization, Member, BillingCustomer from BetterAuth's `user.create`
+hook; a default Folder from `createProject`), those writes come for free only when
+you call the real function. Inlining `db.user.create()` silently drops them.
+
+---
+
 ## Per-model decision tree (run this BEFORE writing any factory)
 
 For every model with `has_creation_code: true` in `autonoma/entity-audit.md`, walk this tree
