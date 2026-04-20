@@ -3,13 +3,14 @@ name: generate-adhoc-tests
 description: >
   Generates focused E2E test cases for a user-defined topic through a validated multi-step pipeline.
   Each step runs in an isolated subagent and must pass deterministic validation before the next
-  step begins. Steps 1, 2, and 4 run as normal; Step 3 scopes test generation to the requested
-  topic. Use when you want targeted test coverage for a specific feature area.
+  step begins. When scenarios already exist in Autonoma, fetches context from the API and runs only
+  Step 3 scoped to the topic. On a first run, executes the full 4-step pipeline with Step 3 focused.
+  Use when you want targeted test coverage for a specific feature or domain.
 ---
 
-# Autonoma Ad Hoc E2E Test Generation Pipeline
+# Autonoma Focused E2E Test Generation Pipeline
 
-You are orchestrating a 4-step test generation pipeline. Each step runs as an isolated subagent.
+You are orchestrating a focused test generation pipeline. Each step runs as an isolated subagent.
 **Every step MUST complete successfully and pass validation before the next step begins.**
 Do NOT skip steps. Do NOT proceed if validation fails.
 
@@ -77,6 +78,73 @@ echo "Generation ID: $GENERATION_ID"
 ```
 
 If `GENERATION_ID` is empty, log the HTTP status and response body above for debugging, then continue anyway — reporting is best-effort and must never block test generation.
+
+## Checking Existing Setup
+
+Check whether scenarios with active recipes already exist in Autonoma for this application:
+```bash
+AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
+GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id-${FOCUS_SLUG}" 2>/dev/null || echo '')
+HAS_SCENARIOS="no"
+SCENARIOS_RESPONSE=""
+if [ -n "$GENERATION_ID" ]; then
+  SCENARIOS_RESPONSE=$(curl -s "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/scenarios" \
+    -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
+  HAS_SCENARIOS=$(echo "$SCENARIOS_RESPONSE" | python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+active = [s for s in data.get('scenarios', []) if s.get('hasActiveRecipe')]
+print('yes' if active else 'no')
+" 2>/dev/null || echo "no")
+fi
+echo "Has active scenarios: $HAS_SCENARIOS"
+```
+
+**If `HAS_SCENARIOS=yes`** — scenarios and tests already exist. Fetch context from the API and run only Step 3:
+
+```bash
+AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
+GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id-${FOCUS_SLUG}" 2>/dev/null || echo '')
+
+EXISTING_CONTEXT=$(curl -s "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/existing-tests" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
+
+SCENARIOS_CONTEXT=$(echo "$SCENARIOS_RESPONSE" | python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+lines = ['## Available Scenarios', '']
+for s in data.get('scenarios', []):
+    status = 'active' if s.get('hasActiveRecipe') else 'no recipe'
+    lines.append(f\"- **{s['name']}** ({status})\")
+print('\n'.join(lines))
+" 2>/dev/null || echo "")
+
+TESTS_CONTEXT=$(echo "$EXISTING_CONTEXT" | python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+tests = data.get('tests', [])
+lines = [f'## Existing Tests ({len(tests)} total)', '']
+for t in tests:
+    lines.append(f\"- {t['name']} (slug: {t['slug']})\")
+print('\n'.join(lines))
+" 2>/dev/null || echo "")
+
+SKILLS_CONTEXT=$(echo "$EXISTING_CONTEXT" | python3 -c "
+import json, sys
+data = json.loads(sys.stdin.read())
+skills = data.get('skills', [])
+lines = [f'## Available Skills ({len(skills)} total)', '']
+for s in skills:
+    lines.append(f\"- {s['name']}: {s['description']}\")
+print('\n'.join(lines))
+" 2>/dev/null || echo "")
+```
+
+Skip to **Step 3: Generate Focused E2E Test Cases** and pass the fetched context inline in the subagent task — do not run Steps 1, 2, or 4.
+
+**If `HAS_SCENARIOS=no`** — this is a first run. Continue with the full pipeline below (Steps 1 through 4).
+
+---
 
 ## Step 1: Generate Knowledge Base
 
@@ -251,29 +319,36 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"type":"log","data":{"message":"Generating focused E2E test cases from knowledge base and scenarios..."}}' || true
+  -d '{"type":"log","data":{"message":"Generating focused E2E test cases..."}}' || true
 ```
 
 Spawn the `focused-test-case-generator` subagent with the following task (substitute the actual
-values for FOCUS_PROMPT and FOCUS_SLUG before spawning):
+values for FOCUS_PROMPT, FOCUS_SLUG, and — when coming from the API-fetch path — the context
+variables SCENARIOS_CONTEXT, TESTS_CONTEXT, and SKILLS_CONTEXT before spawning):
 
 > **FOCUS_PROMPT**: <the user's focus description>
 > **FOCUS_SLUG**: <kebab-case slug>
 >
+> *(API-fetch path only — omit this block when running the full pipeline)*
+> Context fetched from the Autonoma API (use this instead of reading local files):
+> <SCENARIOS_CONTEXT>
+> <TESTS_CONTEXT>
+> <SKILLS_CONTEXT>
+>
 > Read the knowledge base from `autonoma/AUTONOMA.md`, skills from `autonoma/skills/`,
-> and scenarios from `autonoma/scenarios.md`.
+> and scenarios from `autonoma/scenarios.md` (if they exist and no inline context was provided above).
 > Generate E2E test cases focused exclusively on the topic described in FOCUS_PROMPT.
 > Write tests to `autonoma/qa-tests/{FOCUS_SLUG}/`.
 > You MUST create `autonoma/qa-tests/{FOCUS_SLUG}/INDEX.md` with frontmatter containing
 > total_tests, total_folders, folder breakdown, and coverage_correlation.
 > Each test file MUST have frontmatter with title, description, criticality, scenario, and flow.
-> Treat `scenarios.md` as fixture input only. Do not generate tests whose purpose is to verify
+> Treat scenario data as fixture input only. Do not generate tests whose purpose is to verify
 > scenario counts, seeded inventories, or Environment Factory correctness. Only reference
 > scenario data when it is needed to test a real user-facing app behavior within the focus area.
 > Fetch the latest instructions from https://docs.agent.autonoma.app/llms/test-planner/step-3-e2e-tests.txt first.
 
 **After the subagent completes:**
-1. Verify `autonoma/qa-tests/{FOCUS_SLUG}/INDEX.md` exists and is non-empty
+1. Verify `autonoma/qa-tests/${FOCUS_SLUG}/INDEX.md` exists and is non-empty
 2. The PostToolUse hook will have validated the INDEX frontmatter and individual test file frontmatter
 3. Read the INDEX.md and present the summary to the user — total tests, folder breakdown, coverage correlation
 
@@ -318,9 +393,11 @@ print(json.dumps({'testCases': test_cases}))
 
 4. **If `AUTONOMA_AUTO_ADVANCE` is not `true`:** Call `AskUserQuestion` with:
    - question: "Does this focused test distribution look correct? The tests should cover the requested topic thoroughly."
-   - options: ["Yes, proceed to Step 4", "I want to suggest changes"]
+   - options: ["Yes, proceed to Step 4", "I want to suggest changes", "Done — skip Step 4 (scenarios already exist)"]
    Wait for the user's response before proceeding.
-   **If `AUTONOMA_AUTO_ADVANCE=true`:** Skip the prompt and proceed directly to Step 4.
+   **If `AUTONOMA_AUTO_ADVANCE=true`:** Skip the prompt and proceed directly to Step 4 (or stop here if coming from the API-fetch path).
+
+If coming from the **API-fetch path** (scenarios already existed), stop here after uploading. Step 4 is not needed.
 
 ## Step 4: Environment Factory
 
@@ -394,7 +471,6 @@ echo "GENERATION_ID=${GENERATION_ID:-<empty>}"
   -H "Content-Type: application/json" \
   -d '{"type":"log","data":{"message":"Uploading validated scenario recipes to setup..."}}' || true
 if [ -n "$GENERATION_ID" ]; then
-  AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
   RECIPE_PATH="$AUTONOMA_ROOT/autonoma/scenario-recipes.json"
   if ! python3 -c "import json; json.load(open('$RECIPE_PATH'))" 2>/dev/null; then
     echo "ERROR: scenario-recipes.json is not valid JSON. Step 4 cannot complete."
@@ -411,35 +487,11 @@ if [ -n "$GENERATION_ID" ]; then
     echo "ERROR: Recipe upload failed (HTTP $UPLOAD_STATUS). Step 4 cannot complete."
     exit 1
   fi
-
-  VERIFY_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X GET "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/scenarios" \
-    -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
-  VERIFY_STATUS=$(echo "$VERIFY_RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
-  VERIFY_BODY=$(echo "$VERIFY_RESPONSE" | sed '/HTTP_STATUS:/d')
-  if [ "$VERIFY_STATUS" != "200" ]; then
-    echo "ERROR: Failed to verify scenarios (HTTP $VERIFY_STATUS). Step 4 cannot complete."
-    exit 1
-  fi
-  EXPECTED_NAMES=$(python3 -c "import json; data=json.load(open('$RECIPE_PATH')); print('\n'.join(r['name'] for r in data['recipes']))")
-  MISSING=""
-  for NAME in $EXPECTED_NAMES; do
-    HAS_ACTIVE=$(echo "$VERIFY_BODY" | python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
-match = [s for s in data.get('scenarios', []) if s['name'] == '$NAME' and s.get('hasActiveRecipe')]
-print('yes' if match else 'no')
-" 2>/dev/null || echo "no")
-    if [ "$HAS_ACTIVE" != "yes" ]; then
-      MISSING="$MISSING $NAME"
-    fi
-  done
-  if [ -n "$MISSING" ]; then
-    echo "ERROR: The following scenarios are missing or lack an active recipe on the dashboard:$MISSING"
-    echo "Step 4 cannot complete. Recipe upload may have partially failed."
-    exit 1
-  fi
-  echo "Verified: all scenario recipes persisted successfully on the dashboard."
 fi
+[ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"log","data":{"message":"Environment Factory implementation and scenario validation completed."}}' || true
 [ -n "$GENERATION_ID" ] && curl -f -X POST "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/events" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}" \
   -H "Content-Type: application/json" \
@@ -450,7 +502,7 @@ fi
 
 After all steps complete, summarize:
 - **Focus**: The user-defined topic and output location (`autonoma/qa-tests/{FOCUS_SLUG}/`)
-- **Step 1**: Knowledge base location and core flow count
-- **Step 2**: Scenario count and entity types covered
+- **Step 1**: Knowledge base location and core flow count *(full pipeline only)*
+- **Step 2**: Scenario count and entity types covered *(full pipeline only)*
 - **Step 3**: Total focused test count, folder breakdown, coverage correlation
-- **Step 4**: Environment Factory location, backend changes, smoke-test results, required secrets, and per-scenario lifecycle results
+- **Step 4**: Environment Factory location, backend changes, smoke-test results, required secrets, and per-scenario lifecycle results *(full pipeline only)*

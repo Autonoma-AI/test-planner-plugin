@@ -60,67 +60,48 @@ Implements or completes the backend Environment Factory so the planned scenarios
 
 ---
 
-## Autonoma Ad Hoc Planner
+## Ad Hoc Test Generation
 
-A second plugin in this repository that runs the same 4-step pipeline but scopes Step 3 to a user-defined focus area. Use it when you want targeted test coverage for a specific feature without regenerating your full test suite.
-
-### Install
-
-**Step 1:** The marketplace is the same as above. If you've already added it, skip this:
-
-```
-/plugin marketplace add Autonoma-AI/test-planner-plugin
-```
-
-**Step 2:** Install the ad hoc plugin:
-
-```
-/plugin install autonoma-adhoc-planner@autonoma
-```
+The same plugin includes a `generate-adhoc-tests` command that generates tests focused on a specific topic without regenerating your full test suite.
 
 ### Usage
-
-Inside any project with Claude Code:
 
 Pass your focus description directly after the command:
 
 ```
-/autonoma-adhoc-planner:generate-adhoc-tests description
+/autonoma-test-planner:generate-adhoc-tests description
 ```
 
-Or invoke without arguments and the plugin will suggest focus areas based on your codebase:
+Or invoke without arguments and the command will suggest focus areas based on your codebase:
 
 ```
-/autonoma-adhoc-planner:generate-adhoc-tests
+/autonoma-test-planner:generate-adhoc-tests
 ```
 
-The plugin walks you through 4 steps, asking for confirmation at each checkpoint before proceeding.
+### How it works
 
-## How it works
+**Subsequent runs** (scenarios already configured in Autonoma): fetches scenarios and existing tests from the Autonoma, then runs only focused test generation (Step 3). Steps 1, 2, and 4 are skipped.
 
-### How it differs from the main planner
+**First run** (no scenarios configured yet): runs the full 4-step pipeline with Step 3 scoped to the requested focus area.
 
-Steps 1, 2, and 4 run identically to the main planner. Step 3 is scoped:
+| Step | Full suite (`generate-tests`) | Ad hoc — first run | Ad hoc — subsequent run |
+|------|-------------------------------|-------------------|------------------------|
+| 1 — Knowledge Base | Always | Yes | Skipped |
+| 2 — Scenarios | Always | Yes | Skipped (fetched from API) |
+| 3 — E2E Tests | All features | Focus area only | Focus area only |
+| 4 — Environment Factory | Always | Yes | Skipped |
 
-| Step | Main planner | Ad hoc planner |
-|------|-------------|----------------|
-| 1 — Knowledge Base | Full codebase | Full codebase |
-| 2 — Scenarios | Full data model | Full data model |
-| 3 — E2E Tests | All features | **Focus area only** |
-| 4 — Environment Factory | All scenarios | All scenarios |
-
-Tests are written to `autonoma/qa-tests/{focus-slug}/` so they sit alongside your existing test suite without overwriting it. Running the ad hoc planner twice with different focus areas produces two separate subfolders.
+Tests are written to `autonoma/qa-tests/{focus-slug}/` so they sit alongside your existing test suite without overwriting it.
 
 ### Running multiple focus areas
 
-You can run the ad hoc planner multiple times for different topics, including simultaneously. Each run writes to its own subfolder and tracks its own generation ID file.
+Each focus area run writes to its own subfolder and tracks its own generation ID file. Multiple topics can run in parallel:
 
 ```
 autonoma/qa-tests/
 ├── canvas-interactions/      ← autonoma/.generation-id-canvas-interactions
 └── signatures-and-documents/ ← autonoma/.generation-id-signatures-and-documents
 ```
-
 
 ---
 

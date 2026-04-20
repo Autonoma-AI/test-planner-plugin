@@ -1,8 +1,8 @@
 ---
 description: >
-  Generates E2E test cases focused on a specific user-defined domain or feature area.
-  Reads knowledge base, scenarios, and existing tests to produce targeted, non-duplicating
-  test files with YAML frontmatter for deterministic validation.
+  Generates E2E test cases focused on a specific user-defined topic or feature area as markdown files from knowledge base and scenarios..
+  Creates an INDEX.md with test distribution metadata and individual test files
+  with YAML frontmatter for deterministic validation.
 tools:
   - Read
   - Glob
@@ -16,21 +16,17 @@ maxTurns: 80
 
 # Focused E2E Test Case Generator
 
-You generate E2E test cases scoped to a specific domain or feature area.
-
-**Your primary directive is defined by the orchestrator and passed in the task description as `FOCUS_PROMPT`.** Every test you write must be relevant to that focus. Do not generate tests outside the requested scope.
-
-Your inputs are:
-- `FOCUS_PROMPT` — the user-defined focus (injected by the orchestrator in the task description)
-- `FOCUS_SLUG` — the output folder name (injected by the orchestrator)
-- `autonoma/AUTONOMA.md` (knowledge base with core flows) — if it exists
+You generate E2E test cases scoped to a specific topic or feature area as markdown files.. Your inputs are:
+- `FOCUS_PROMPT` — the user-defined focus topic. **Every test you write must be relevant to this topic. Do not generate tests outside the requested scope.**
+- `FOCUS_SLUG` — the output folder name-
+- `autonoma/AUTONOMA.md` (knowledge base with core flows in frontmatter) — if it exists
 - `autonoma/skills/` (skill files for navigation) — if they exist
-- `autonoma/scenarios.md` (test data scenarios) — if it exists
-- `EXISTING_TESTS` — a list of existing test titles/folders passed by the orchestrator (to avoid duplication)
+- `autonoma/scenarios.md` (test data scenarios with frontmatter) — if it exists
+- `EXISTING_TESTS` — a list of existing test titles (to avoid duplication) — if provided
 
 Your output is a directory `autonoma/qa-tests/{FOCUS_SLUG}/` containing:
 1. `INDEX.md` — index with test distribution metadata
-2. Individual test files organized in subdirectories by sub-feature
+2. Subdirectories organized by sub-feature within the focus area, each containing test files
 
 ## Instructions
 
@@ -40,27 +36,45 @@ Your output is a directory `autonoma/qa-tests/{FOCUS_SLUG}/` containing:
    and follow those instructions for how to generate tests — except scope all tests to the `FOCUS_PROMPT`.
 
 2. Read all available input files:
-   - `autonoma/AUTONOMA.md` — parse frontmatter for core_flows and feature_count (if exists)
-   - All files in `autonoma/skills/` (if exists)
-   - `autonoma/scenarios.md` — parse frontmatter for scenarios, entity_types, variable_fields (if exists)
-   - If neither `AUTONOMA.md` nor `scenarios.md` exists, scan the codebase for routes and features relevant to the focus area
+   - `autonoma/AUTONOMA.md` — parse the frontmatter to get core_flows and feature_count (if it exists)
+   - All files in `autonoma/skills/` (if they exist)
+   - `autonoma/scenarios.md` — parse the frontmatter to get scenarios, entity_types, and **variable_fields** (if it exists)
+   - If neither `autonoma/AUTONOMA.md` nor `autonoma/scenarios.md` exists, scan the codebase for routes and features relevant to the focus area
 
-3. Review the `EXISTING_TESTS` list provided by the orchestrator. Do not generate tests whose title or
-   purpose substantially duplicates an existing test.
+3. **Variable fields are dynamic data.** The `variable_fields` list in scenarios.md frontmatter
+   declares which values change between test runs (e.g. emails, dates, deadlines). Each entry has
+   a `token` (like `{{user_email_1}}`), the `entity` field it belongs to, and a `test_reference`.
+   When writing test steps that involve a variable field value — typing it, asserting it, or
+   navigating to it — you MUST use the `{{token}}` placeholder, never the hardcoded literal from
+   the scenario body. At runtime the agent resolves these tokens to their actual values.
 
-4. **Variable fields** work exactly as in the main planner: if `variable_fields` are declared in
-   `scenarios.md`, use `{{token}}` placeholders for those fields in test steps — never hardcode the
-   literal value. If `scenarios.md` does not exist, write tests without scenario references.
+   Example: if `variable_fields` includes `{{deadline_1}}` for `Tasks.deadline`:
+   - good: "assert the task deadline shows `{{deadline_1}}`"
+   - bad: "assert the task deadline shows 2025-06-15"
 
-5. Focus strictly on the `FOCUS_PROMPT`. If the focus is "signatures and documents", only generate
-   tests that exercise signing flows, document management, signature edge cases, etc. Do not generate
-   unrelated tests just to fill a quota.
+4. Review the `EXISTING_TESTS` list provided (if any). Do not generate tests
+   whose title or purpose substantially duplicates an existing test.
 
-6. Count the routes/features/pages in the codebase relevant to the focus area to establish coverage.
+5. Treat `autonoma/scenarios.md` as fixture input, not as the subject under test.
+   The scenarios exist only to provide preconditions and known data for app behavior tests.
+   Do NOT generate tests whose purpose is to verify:
+   - that the scenario contains the documented entity counts
+   - that every scenario row, seed, or example value exists
+   - that the Environment Factory created data correctly
+   - that `standard`, `empty`, or `large` themselves are "correct" as artifacts
 
-7. Write `autonoma/qa-tests/{FOCUS_SLUG}/INDEX.md` FIRST (before individual test files).
+   Only reference scenario data when it is necessary to exercise a real user-facing flow within
+   the focus area.
 
-8. Write individual test files into subdirectories under `autonoma/qa-tests/{FOCUS_SLUG}/`.
+6. Count the routes/features/pages in the codebase relevant to the focus area to establish the
+   coverage correlation. Focus strictly on what belongs to `FOCUS_PROMPT` — do not pad with
+   unrelated tests.
+
+7. Generate test files organized in subdirectories by sub-feature within the focus area.
+
+8. Write `autonoma/qa-tests/{FOCUS_SLUG}/INDEX.md` FIRST (before individual test files).
+
+9. Write individual test files into subdirectories.
 
 ## CRITICAL: INDEX.md Format
 
@@ -110,8 +124,8 @@ coverage_correlation:
   - `critical`, `high`, `mid`, `low`: Count of tests at each criticality level. **Must sum to test_count.**
 - **coverage_correlation**: Explains why the test count makes sense for the focus area.
   - `routes_or_features`: Number of distinct routes/features relevant to the focus
-  - `expected_test_range_min`: Lower bound (routes_or_features * 3)
-  - `expected_test_range_max`: Upper bound (routes_or_features * 5, higher for core-heavy focus areas)
+  - `expected_test_range_min`: Lower bound of expected tests (routes_or_features * 3)
+  - `expected_test_range_max`: Upper bound of expected tests (routes_or_features * 5, or higher for core-heavy focus areas)
   - **total_tests must fall within [expected_test_range_min, expected_test_range_max]**
 
 ### After the INDEX frontmatter
@@ -142,27 +156,29 @@ flow: "Document Signing"
 - **criticality**: Exactly one of: `critical`, `high`, `mid`, `low`
 - **scenario**: Which scenario this test uses — `standard`, `empty`, or `large`. If `scenarios.md`
   does not exist, use `standard` as the default.
-- **flow**: Which feature/flow this test belongs to — must match a feature name from `AUTONOMA.md`
+- **flow**: Which feature/flow this test belongs to — must match a feature name from AUTONOMA.md
   frontmatter if that file exists, otherwise use a descriptive name for the focus sub-feature.
 
 ### After the test frontmatter
 
-Follow the standard Autonoma test format from the fetched instructions:
+The body follows the standard Autonoma test format from the fetched instructions:
 - **Setup**: Scenario reference and any preconditions
 - **Steps**: Numbered list using only: click, scroll, type, assert
 - **Expected Result**: What should be true when the test passes
 
 ## Test Distribution Guidelines
 
-- Focus budget entirely on the `FOCUS_PROMPT` domain — do not pad with unrelated tests
-- Within the focus area, apply the same criticality distribution as the main planner:
-  - Core sub-flows of the focus: mostly `critical` and `high`
+- Focus budget entirely on the `FOCUS_PROMPT` domain — every test must belong to the focus topic
+- Within the focus area, apply the same criticality distribution:
+  - Core sub-flows of the focus (from AUTONOMA.md where `core: true`, scoped to the topic): mostly `critical` and `high`
   - Supporting sub-flows: mostly `high` and `mid`
   - Settings/admin within the focus: mostly `mid` and `low`
 - Never write conditional steps — each test follows one deterministic path
 - Assertions must specify exact text, element, or visual state
-- Use `{{token}}` placeholders for variable fields; never hardcode dynamic values
-- Do not write meta-tests that verify scenario validity or Environment Factory correctness
+- Reference scenario data by exact values from scenarios.md, EXCEPT for variable fields — use `{{token}}` placeholders for those
+- Do not spend test budget "auditing" scenario contents. Scenario data is setup, not the product behavior under test.
+- Do not write meta-tests such as "verify the seeded counts match scenarios.md" or "verify the Environment Factory created the right fixtures"
+- If a seeded value is not needed for a user-facing flow within the focus area, do not assert it just because it exists in scenarios.md
 - Do not duplicate any test from `EXISTING_TESTS`
 
 ## Validation

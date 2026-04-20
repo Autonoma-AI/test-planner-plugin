@@ -50,6 +50,10 @@ case "$FILE_PATH" in
     VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_test_index.py"
     VALIDATOR_NAME="validate-test-index"
     ;;
+  */autonoma/qa-tests/*/INDEX.md)
+    VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_test_index.py"
+    VALIDATOR_NAME="validate-adhoc-test-index"
+    ;;
   */autonoma/qa-tests/*/[!I]*.md)
     VALIDATOR_SCRIPT="$VALIDATORS_DIR/validate_test_file.py"
     VALIDATOR_NAME="validate-test-file"
@@ -104,7 +108,8 @@ if [ "$VALIDATOR_NAME" = "validate-scenario-recipes" ]; then
   fi
 fi
 
-# For INDEX.md, also validate directory structure
+# For root INDEX.md only, also validate directory structure
+# (subfolder INDEX.md from adhoc runs uses validate-adhoc-test-index and skips this check)
 if [ "$VALIDATOR_NAME" = "validate-test-index" ]; then
   DIR_SCRIPT="$VALIDATORS_DIR/validate_directory_structure.py"
   DIR_RESULT=$(python3 "$DIR_SCRIPT" "$FILE_PATH" 2>&1)

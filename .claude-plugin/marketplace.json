@@ -14,17 +14,12 @@
         "repo": "Autonoma-AI/test-planner-plugin",
         "ref": "production"
       },
-      "description": "Generates comprehensive E2E test cases through a validated 4-step pipeline with deterministic validation"
+      "description": "Generates comprehensive E2E test cases through a validated 4-step pipeline with deterministic validation. Includes generate-tests (full suite) and generate-adhoc-tests (focused topic) commands."
     },
     {
       "name": "autonoma-test-planner-development",
       "source": "./",
-      "description": "[DEVELOPMENT] Generates comprehensive E2E test cases through a validated 4-step pipeline with deterministic validation"
-    },
-    {
-      "name": "autonoma-adhoc-planner",
-      "source": "./adhoc",
-      "description": "Generates focused E2E tests for a user-defined topic or feature area with a custom system prompt"
+      "description": "[DEVELOPMENT] Generates comprehensive E2E test cases through a validated 4-step pipeline with deterministic validation. Includes generate-tests (full suite) and generate-adhoc-tests (focused topic) commands."
     }
   ]
 }
