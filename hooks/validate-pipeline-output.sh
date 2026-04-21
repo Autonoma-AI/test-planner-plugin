@@ -134,7 +134,7 @@ case "$FILE_PATH" in
     # check has proven insufficient — see the post-mortem in the plugin repo.
     # This validator parses autonoma/entity-audit.md, opens the handler named
     # in the sentinel body, and blocks the write when any factory for a
-    # has_creation_code: true model contains an inline ORM write.
+    # independently_created: true model contains an inline ORM write.
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     # Gate 1 — cheap syntactic checks (grep, mount, audit-flip cap).
     if ! OUTPUT=$(python3 "$SCRIPT_DIR/validators/validate_endpoint_implemented.py" "$FILE_PATH" 2>&1); then
@@ -178,7 +178,7 @@ case "$FILE_PATH" in
     # accepted (step-2-ack = "Scenarios starting", which fires AFTER the user
     # approves the Entity Audit). This snapshot is diffed against the current
     # audit at .endpoint-implemented time to detect the env-factory agent
-    # gaming the factory-integrity check by mass-flipping has_creation_code
+    # gaming the factory-integrity check by mass-flipping independently_created
     # true -> false. See the post-mortem in the plugin repo.
     if [ "$ack_num" = "2" ] && [ -f "autonoma/entity-audit.md" ] && [ ! -f "autonoma/.entity-audit-step2.md" ]; then
       cp autonoma/entity-audit.md autonoma/.entity-audit-step2.md 2>/dev/null || true

@@ -51,7 +51,7 @@ After completion: verify files exist, present core_flows table, `AskUserQuestion
 Spawn `entity-audit-generator`:
 
 > Read the knowledge base. Audit how each database model is created. For every model, find the
-> dedicated creation function in a service/repository/helper. Classify as `has_creation_code: true`
+> dedicated creation function in a service/repository/helper. Classify as `independently_created: true`
 > (factory) or `false` (raw SQL fallback). Record side_effects (informational). Output
 > `autonoma/entity-audit.md` with frontmatter listing each model.
 > Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-2-entity-audit.txt"`.
@@ -77,7 +77,7 @@ After completion: present scenarios, `AskUserQuestion`, `Write` `autonoma/.step-
 Spawn `env-factory-generator`:
 
 > Read `autonoma/entity-audit.md` and `autonoma/scenarios.md`. Install SDK packages and configure
-> the handler. Register a factory for every model with `has_creation_code: true` (call the audit's
+> the handler. Register a factory for every model with `independently_created: true` (call the audit's
 > `creation_file`/`creation_function` — never reimplement inline). Implement the auth callback
 > using the app's real session/token creation. Run a `discover` smoke test. Run the factory-integrity
 > check. Then `Write` `autonoma/.endpoint-implemented` with a short summary. Do NOT run `up`/`down`
@@ -104,7 +104,7 @@ Spawn `scenario-validator`:
 > `autonoma/.endpoint-validated`. If you hit the iteration cap OR preflight fails, STOP and
 > report — do NOT write the sentinel.
 > Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-5-validate.txt"`.
-> Verify: every audited model appears in `discover.schema.models`, every `has_creation_code`
+> Verify: every audited model appears in `discover.schema.models`, every `independently_created`
 > model has a registered factory, `auth` is non-empty, DB state is correct before and after
 > `down`, and preflight exits 0.
 
