@@ -520,6 +520,59 @@ OnboardingState: defineFactory({
 }),
 ```
 
+### 4b. Populate `tableNameMap` sparsely (do not mirror the factory registry)
+
+The SDK auto-derives model names from SQL tables by splitting on `_` and PascalCasing
+each part. **No pluralization is performed.** `organization` → `Organization`;
+`organizations` → `Organizations`; `api_key` → `ApiKey`; `api_keys` → `ApiKeys`.
+
+Do NOT write a `tableNameMap` / `table_name_map` that mirrors your factory registry
+1:1. That doubles the maintenance surface and is a silent-breakage foot-gun — adding a
+new model forces two edits and forgetting one silently misroutes creates.
+
+**Algorithm to follow before writing the map:**
+
+1. List every factory key you intend to register.
+2. For each key, compute `autoName = snakeToPascal(dbTable)` — split on `_`, PascalCase
+   each part, concatenate. No pluralization step.
+3. If `autoName === factoryKey`: **do not add** the entry.
+4. If `autoName !== factoryKey`: add the entry.
+5. If after step 4 the map is empty, **omit the `tableNameMap` field entirely**.
+
+**Worked example (plural DB tables, singular factory keys):**
+
+```ts
+// DB tables: organizations, users, api_keys
+// Factory keys: Organization, User, ApiKey
+// Every auto-derived name disagrees → every factory needs one entry:
+tableNameMap: {
+  Organization: 'organizations',
+  User: 'users',
+  ApiKey: 'api_keys',
+},
+factories: { Organization: ..., User: ..., ApiKey: ... },
+```
+
+**Worked example (singular DB tables):**
+
+```ts
+// DB tables: organization, user, api_key
+// Factory keys: Organization, User, ApiKey
+// Every auto-derived name matches → omit tableNameMap entirely.
+factories: { Organization: ..., User: ..., ApiKey: ... },
+```
+
+**Red flag.** If `tableNameMap` ends up with exactly one entry per factory and every
+entry is a plural↔singular rename, you have two options:
+
+- (a) Keep the map (verbose but explicit).
+- (b) Change factory keys to match the plural auto-derived names (`Organizations`,
+  `Users`, `ApiKeys`) and drop the map entirely.
+
+Prefer (b) unless scenario files already use the singular convention. A `tableNameMap`
+that is a 1:1 copy of the factory registry means you're doing work the SDK already
+does.
+
 ### 5. Register the route
 
 Add the endpoint to the app's routing.
