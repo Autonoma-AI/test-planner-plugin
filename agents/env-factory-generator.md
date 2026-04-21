@@ -147,9 +147,9 @@ torn down via their owner's factory (one of the four options above).
 
 ## Compatibility with legacy audits
 
-Older audits used a single `has_creation_code` field. The validators read both schemas and
-treat `has_creation_code: true` as `independently_created: true` with an empty `created_by`.
-If the audit you're reading only has `has_creation_code`, you can still register factories,
+Older audits used a single `independently_created` field. The validators read both schemas and
+treat `independently_created: true` as `independently_created: true` with an empty `created_by`.
+If the audit you're reading only has `independently_created`, you can still register factories,
 but you'll lose the `created_by` teardown guidance above — prefer regenerating the audit
 with the current prompt when possible.
 
@@ -252,7 +252,9 @@ There is no named export to import.
    to the developers who will encounter the new function — they should be able to tell at a
    glance that it was lifted out for factory reuse, not invented for it.
 4. **Update `autonoma/entity-audit.md` in-place** — change `creation_file` to the new file,
-   `creation_function` to the new exported name, and REMOVE `needs_extraction: true`.
+   `creation_function` to the new exported name, add `extracted_to: <new-path>`,
+   and keep `needs_extraction: true` so the fidelity rubric's framework-hook
+   carve-out can score the factory against the extracted helper.
    Downstream steps read the audit; they must see the fixed state.
 5. Now — and only now — import the new function and wire the factory.
 
