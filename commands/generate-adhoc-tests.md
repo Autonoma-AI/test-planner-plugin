@@ -72,11 +72,9 @@ HTTP_STATUS=$(echo "$RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
 BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
 echo "Setup API response (HTTP $HTTP_STATUS): $BODY"
 GENERATION_ID=$(echo "$BODY" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo '')
-APPLICATION_ID=$(echo "$BODY" | python3 -c "import json,sys; print(json.load(sys.stdin).get('applicationId',''))" 2>/dev/null || echo "$AUTONOMA_PROJECT_ID")
 mkdir -p autonoma
 echo "$GENERATION_ID" > "autonoma/.generation-id-${FOCUS_SLUG}"
 echo "Generation ID: $GENERATION_ID"
-echo "Application ID: $APPLICATION_ID"
 ```
 
 If `GENERATION_ID` is empty, log the HTTP status and response body above for debugging, then continue anyway — reporting is best-effort and must never block test generation.
@@ -85,20 +83,15 @@ If `GENERATION_ID` is empty, log the HTTP status and response body above for deb
 
 Check whether scenarios with active recipes already exist in Autonoma for this application:
 ```bash
-AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
-GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id-${FOCUS_SLUG}" 2>/dev/null || echo '')
-HAS_SCENARIOS="no"
-SCENARIOS_RESPONSE=""
-if [ -n "$GENERATION_ID" ]; then
-  SCENARIOS_RESPONSE=$(curl -s "${AUTONOMA_API_URL}/v1/setup/setups/${GENERATION_ID}/scenarios" \
-    -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
-  HAS_SCENARIOS=$(echo "$SCENARIOS_RESPONSE" | python3 -c "
+SCENARIOS_RESPONSE=$(curl -s "${AUTONOMA_API_URL}/v1/setup/applications/${AUTONOMA_PROJECT_ID}/scenarios" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
+HAS_SCENARIOS=$(echo "$SCENARIOS_RESPONSE" | python3 -c "
 import json, sys
 data = json.loads(sys.stdin.read())
 active = [s for s in data.get('scenarios', []) if s.get('hasActiveRecipe')]
 print('yes' if active else 'no')
 " 2>/dev/null || echo "no")
-fi
+echo "$SCENARIOS_RESPONSE" > /tmp/autonoma-scenarios-response.json
 echo "Has active scenarios: $HAS_SCENARIOS"
 ```
 
@@ -108,10 +101,10 @@ echo "Has active scenarios: $HAS_SCENARIOS"
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id-${FOCUS_SLUG}" 2>/dev/null || echo '')
 
-EXISTING_CONTEXT=$(curl -s "${AUTONOMA_API_URL}/v1/setup/applications/${APPLICATION_ID}/test-suite" \
+EXISTING_CONTEXT=$(curl -s "${AUTONOMA_API_URL}/v1/setup/applications/${AUTONOMA_PROJECT_ID}/test-suite" \
   -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
 
-SCENARIOS_CONTEXT=$(echo "$SCENARIOS_RESPONSE" | python3 -c "
+SCENARIOS_CONTEXT=$(cat /tmp/autonoma-scenarios-response.json 2>/dev/null | python3 -c "
 import json, sys
 data = json.loads(sys.stdin.read())
 lines = ['## Available Scenarios', '']
