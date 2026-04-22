@@ -69,6 +69,40 @@ This step does **not** implement backend code. It only validates the existing in
 - `autonoma/.scenario-validation.json`: Step 5 terminal-state artifact
 - `autonoma/scenario-recipes.json`
 
+## Ad Hoc Test Generation
+
+The same plugin includes a `generate-adhoc-tests` command that generates tests focused on a specific topic without regenerating your full test suite.
+
+### Usage
+
+Pass your focus description directly after the command:
+
+```
+/autonoma-test-planner:generate-adhoc-tests description
+```
+
+Or invoke without arguments and the command will suggest focus areas based on your codebase:
+
+```
+/autonoma-test-planner:generate-adhoc-tests
+```
+
+### How it works
+
+**Subsequent runs** (scenarios already configured in Autonoma): fetches scenarios and existing tests from the Autonoma, then runs only focused test generation (Step 3). Steps 1, 2, and 4 are skipped.
+
+Tests are written to `autonoma/qa-tests/{focus-slug}/` so they sit alongside your existing test suite without overwriting it.
+
+### Running multiple focus areas
+
+Each focus area run writes to its own subfolder and tracks its own generation ID file. Multiple topics can run in parallel:
+
+```
+autonoma/qa-tests/
+├── canvas-interactions/      ← autonoma/.generation-id-canvas-interactions
+└── signatures-and-documents/ ← autonoma/.generation-id-signatures-and-documents
+```
+
 ## Environment Variables
 
 Provide these before running the plugin:
@@ -144,6 +178,15 @@ autonoma-test-planner/
 │   ├── validate-pipeline-output.sh
 │   ├── preflight_scenario_recipes.py
 │   └── validators/
+├── adhoc/
+│   ├── .claude-plugin/
+│   ├── skills/generate-adhoc-tests/SKILL.md
+│   ├── commands/generate-adhoc-tests.md
+│   ├── agents/focused-test-case-generator.md
+│   └── hooks/
+│       ├── hooks.json
+│       ├── validate-pipeline-output.sh
+│       └── validators/
 └── tests/
 ```
 
