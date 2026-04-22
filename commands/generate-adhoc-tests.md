@@ -101,12 +101,13 @@ echo "Has active scenarios: $HAS_SCENARIOS"
 AUTONOMA_ROOT=$(cat /tmp/autonoma-project-root 2>/dev/null || echo '.')
 GENERATION_ID=$(cat "$AUTONOMA_ROOT/autonoma/.generation-id-${FOCUS_SLUG}" 2>/dev/null || echo '')
 
-EXISTING_CONTEXT=$(curl -s "${AUTONOMA_API_URL}/v1/setup/applications/${AUTONOMA_PROJECT_ID}/test-suite" \
-  -H "Authorization: Bearer ${AUTONOMA_API_KEY}")
+curl -s "${AUTONOMA_API_URL}/v1/setup/applications/${AUTONOMA_PROJECT_ID}/test-suite" \
+  -H "Authorization: Bearer ${AUTONOMA_API_KEY}" > /tmp/autonoma-test-suite.json
 
-SCENARIOS_CONTEXT=$(cat /tmp/autonoma-scenarios-response.json 2>/dev/null | python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
+SCENARIOS_CONTEXT=$(python3 -c "
+import json
+with open('/tmp/autonoma-scenarios-response.json') as f:
+    data = json.load(f)
 lines = ['## Available Scenarios', '']
 for s in data.get('scenarios', []):
     status = 'active' if s.get('hasActiveRecipe') else 'no recipe'
@@ -114,9 +115,10 @@ for s in data.get('scenarios', []):
 print('\n'.join(lines))
 " 2>/dev/null || echo "")
 
-TESTS_CONTEXT=$(echo "$EXISTING_CONTEXT" | python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
+TESTS_CONTEXT=$(python3 -c "
+import json
+with open('/tmp/autonoma-test-suite.json') as f:
+    data = json.load(f)
 tests = data.get('tests', [])
 lines = [f'## Existing Tests ({len(tests)} total)', '']
 for t in tests:
@@ -124,9 +126,10 @@ for t in tests:
 print('\n'.join(lines))
 " 2>/dev/null || echo "")
 
-SKILLS_CONTEXT=$(echo "$EXISTING_CONTEXT" | python3 -c "
-import json, sys
-data = json.loads(sys.stdin.read())
+SKILLS_CONTEXT=$(python3 -c "
+import json
+with open('/tmp/autonoma-test-suite.json') as f:
+    data = json.load(f)
 skills = data.get('skills', [])
 lines = [f'## Available Skills ({len(skills)} total)', '']
 for s in skills:
