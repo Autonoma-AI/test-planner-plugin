@@ -58,7 +58,7 @@ def test_invalid_json():
 def test_missing_schema():
     code, out = run_validator(SCRIPT, '{}', filename='discover.json')
     assert code == 1
-    assert 'must contain a "schema" object' in out
+    assert 'schema: Field required' in out
 
 
 def test_missing_scope_field():
@@ -66,14 +66,14 @@ def test_missing_scope_field():
     content = content.replace('    ],\n  }\n}\n', '    ]\n  }\n}\n')
     code, out = run_validator(SCRIPT, content, filename='discover.json')
     assert code == 1
-    assert 'schema is missing required fields' in out
+    assert 'schema.scopeField: Field required' in out
 
 
 def test_model_requires_fields():
     content = VALID.replace('"fields": [', '"oops": [')
     code, out = run_validator(SCRIPT, content, filename='discover.json')
     assert code == 1
-    assert 'fields must be a list' in out
+    assert 'schema.models[0].fields: Field required' in out
 
 
 def test_accepts_enum_and_list_type_formats():
@@ -95,4 +95,4 @@ def test_rejects_unsupported_type_format():
     content = VALID.replace('"type": "String"', '"type": "enum(slack"', 1)
     code, out = run_validator(SCRIPT, content, filename='discover.json')
     assert code == 1
-    assert 'must use a supported type format' in out
+    assert 'schema.models[0].fields[0].type: String should match pattern' in out

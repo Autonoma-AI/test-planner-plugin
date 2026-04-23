@@ -35,14 +35,14 @@ def test_missing_required_fields():
     content = '---\ntitle: x\n---\nbody'
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'Missing required frontmatter fields' in out
+    assert 'description: Field required' in out
 
 
 def test_invalid_criticality():
     content = VALID.replace('criticality: critical', 'criticality: ultra')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'criticality must be one of' in out
+    assert "criticality: Input should be 'critical'" in out
 
 
 def test_all_valid_criticalities():
@@ -59,21 +59,21 @@ def test_empty_title():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'title must be a non-empty string' in out
+    assert 'title: String should have at least 1 character' in out
 
 
 def test_empty_scenario():
     content = VALID.replace('scenario: standard', 'scenario: ""')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'scenario must be a non-empty string' in out
+    assert 'scenario: String should have at least 1 character' in out
 
 
 def test_empty_flow():
     content = VALID.replace('flow: login', 'flow: "  "')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'flow must be a non-empty string' in out
+    assert 'flow: String should have at least 1 character' in out
 
 
 def test_description_whitespace_only():
@@ -83,4 +83,4 @@ def test_description_whitespace_only():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'description must be a non-empty string' in out
+    assert 'description: String should have at least 1 character' in out

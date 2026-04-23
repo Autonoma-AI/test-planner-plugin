@@ -50,7 +50,7 @@ def test_missing_required_fields():
     content = '---\napp_name: x\n---\nbody'
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'Missing required frontmatter fields' in out
+    assert 'app_description: Field required' in out
     assert 'app_description' in out
 
 
@@ -71,7 +71,7 @@ def test_empty_core_flows():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'core_flows must be a non-empty list' in out
+    assert 'core_flows: List should have at least 1 item' in out
 
 
 def test_core_flow_missing_field():
@@ -81,7 +81,7 @@ def test_core_flow_missing_field():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'missing required field: description' in out
+    assert 'core_flows[0].description: Field required' in out
 
 
 def test_no_core_true_flow():
@@ -95,18 +95,18 @@ def test_core_not_boolean():
     content = VALID.replace('core: true', 'core: yes_please')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'must be a boolean' in out
+    assert 'core_flows[0].core: Input should be a valid boolean' in out
 
 
 def test_feature_count_zero():
     content = VALID.replace('feature_count: 3', 'feature_count: 0')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'feature_count must be a positive integer' in out
+    assert 'feature_count: Input should be greater than or equal to 1' in out
 
 
 def test_skill_count_not_integer():
     content = VALID.replace('skill_count: 2', 'skill_count: many')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'skill_count must be a positive integer' in out
+    assert 'skill_count: Input should be a valid integer' in out

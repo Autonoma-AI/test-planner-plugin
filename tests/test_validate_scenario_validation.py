@@ -52,7 +52,7 @@ def test_rejects_missing_required_field():
     payload.pop("recipePath")
     code, out = run_validator(SCRIPT, json.dumps(payload), filename=".scenario-validation.json")
     assert code == 1
-    assert "Missing required fields" in out
+    assert "recipePath: Field required" in out
 
 
 def test_rejects_invalid_endpoint_url():

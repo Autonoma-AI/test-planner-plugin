@@ -49,14 +49,14 @@ def test_missing_required_fields():
     content = '---\nscenario_count: 3\n---\nbody'
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'Missing required frontmatter fields' in out
+    assert 'scenarios: Field required' in out
 
 
 def test_scenario_count_too_low():
     content = VALID.replace('scenario_count: 3', 'scenario_count: 2')
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'scenario_count must be an integer >= 3' in out
+    assert 'scenario_count: Input should be greater than or equal to 3' in out
 
 
 def test_scenario_count_mismatch():
@@ -83,7 +83,7 @@ def test_scenario_missing_field():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'missing required field: description' in out
+    assert 'scenarios[0].description: Field required' in out
 
 
 def test_empty_entity_types():
@@ -93,7 +93,7 @@ def test_empty_entity_types():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'entity_types must be a non-empty list' in out
+    assert 'entity_types: List should have at least 1 item' in out
 
 
 def test_entity_type_missing_name():
@@ -103,4 +103,4 @@ def test_entity_type_missing_name():
     )
     code, out = run_validator(SCRIPT, content)
     assert code == 1
-    assert 'must be a mapping with at least a "name" field' in out
+    assert 'entity_types[0].name: Field required' in out
