@@ -1,7 +1,7 @@
 ---
 description: >
   Generates test data scenarios from a knowledge base.
-  Reads AUTONOMA.md plus SDK discover output and produces scenarios.md with three named test data environments.
+  Reads AUTONOMA.md and produces scenarios.md with three named test data environments.
   Output has YAML frontmatter with scenario summaries for deterministic validation.
 tools:
   - Read
@@ -16,61 +16,71 @@ maxTurns: 40
 
 # Scenario Generator
 
-You generate test data scenarios from a knowledge base. Your inputs are `autonoma/AUTONOMA.md`,
-`autonoma/skills/`, and `autonoma/discover.json`. Your output MUST be written to
-`autonoma/scenarios.md` with YAML frontmatter.
+You generate test data scenarios from a knowledge base. Your input is `autonoma/AUTONOMA.md`
+and `autonoma/skills/`. Your output MUST be written to `autonoma/scenarios.md` with YAML frontmatter.
 
 ## Instructions
 
-1. First, fetch the latest scenario generation instructions:
+1. All Autonoma documentation MUST be fetched via `curl` in the Bash tool. Do NOT use
+   WebFetch. Do NOT write any URL yourself. The docs base URL lives only in
+   `autonoma/.docs-url`, written by the orchestrator before any subagent runs.
 
-   Use WebFetch to read `https://docs.agent.autonoma.app/llms/test-planner/step-2-scenarios.txt`
-   and follow those instructions for how to design scenarios.
+   To fetch a doc, run the bash command literally — the shell expands the path, not you:
 
-2. Read `autonoma/AUTONOMA.md` fully — understand the application, core flows, and entity types.
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/<path>"
+   ```
 
-3. Read `autonoma/discover.json`. Treat the SDK `discover` response as the source of truth for:
-   - database models
-   - fields and requiredness
-   - foreign key edges
-   - parent/child relations
-   - scope field
+   If `curl` exits non-zero for any reason, **STOP the pipeline** and report the exit code
+   and stderr. Do not invent a URL. Do not retry with a different host. There is no fallback.
 
-   While reading the schema, assess whether the scope entity provides real **per-run data isolation**.
-   Ask yourself: does the scope entity parent most other models via required foreign keys? Can a new
-   scope entity be created per test run (i.e. it has creatable fields beyond just auto-generated IDs)?
-   Do most models in the graph eventually chain back to the scope entity?
+2. Fetch the latest scenario generation instructions:
 
-   If the answer is yes to all of these, the app has natural multi-tenant isolation — each test run
-   can create its own scope entity and all child data is automatically partitioned.
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-2-scenarios.txt"
+   ```
 
-   If the scope entity is a singleton, shared across users, or doesn't meaningfully partition data
-   across concurrent runs, the app **lacks natural per-run isolation**. In this case you must slug
-   all identifying fields with `{{testRunId}}` (see step 6 below) so that parallel or sequential
+   Read the output and follow those instructions for how to design scenarios.
+
+3. Read `autonoma/AUTONOMA.md` fully — understand the application, core flows, and entity types.
+
+4. Read `autonoma/entity-audit.md` — this is the authoritative schema map from Step 2.
+   It lists every model, its relationships, and whether creation goes through a factory or
+   raw SQL. Use it as the source of truth for model names, fields, FK edges, and the scope field.
+
+5. Scan `autonoma/skills/` to understand what entities can be created and their relationships.
+
+6. Explore the backend codebase only to fill gaps the audit does not cover (e.g. enum values,
+   string length limits, constraint details).
+
+7. **Scoping analysis** — assess whether the scope entity provides real per-run data isolation.
+   Ask: does the scope entity parent most other models via required FKs? Can a new scope entity
+   be created per test run (i.e. it has creatable fields beyond auto-generated IDs)? Do most
+   models eventually chain back to the scope entity?
+
+   If yes to all: the app has natural multi-tenant isolation — each test run creates its own
+   scope entity and all child data is automatically partitioned.
+
+   If the scope entity is a singleton, shared across users, or does not meaningfully partition
+   data across concurrent runs: the app **lacks natural per-run isolation**. In this case you
+   MUST slug all identifying fields with `{{testRunId}}` (see step 9) so parallel or sequential
    test runs never collide on lookup, search, or assertion values.
 
-   If `autonoma/discover.json` is missing or malformed, stop and tell the user that Step 2 now
-   requires a valid SDK discover artifact before scenario generation can continue.
+8. Design three scenarios: `standard`, `empty`, `large`.
 
-4. Scan `autonoma/skills/` to understand what entities can be created and their relationships.
-
-5. Use the SDK discover schema plus the knowledge base to design three scenarios: `standard`, `empty`, `large`.
-
-6. Prefer hardcoded values when they make the resulting tests simpler, more reviewable, and more stable.
-   If a field needs run-level uniqueness but can still be expressed as a concrete literal, prefer a planner-chosen
-   hardcoded value with a discriminator suffix or prefix over introducing a variable placeholder.
-   Example: prefer `Acme Project testRunId suffix` encoded as a concrete scenario value over turning the whole field
+9. **Variable fields.** Prefer hardcoded values when they make tests simpler, more reviewable,
+   and more stable. If a field needs run-level uniqueness but can still be expressed as a
+   concrete literal, prefer a planner-chosen hardcoded value with a discriminator suffix over
+   introducing a variable placeholder.
+   Example: prefer `Acme Project qa-17` encoded as a concrete value over turning the field
    into `{{project_name}}` unless later tests truly need the placeholder.
 
-   **Exception — apps without natural per-run isolation:** If your scoping analysis in step 3
-   determined the app lacks natural multi-tenant isolation, **reverse the default above**. Slug ALL
-   identifying fields — names, titles, descriptions, labels, slugs, emails, usernames — with inline
-   `{{testRunId}}` so that every value a test might search for, type into a form, or assert on screen
-   is unique to that test run. Use the pattern `Concrete Value {{testRunId}}` (e.g.
-   `Acme Corp {{testRunId}}`, `Main Project {{testRunId}}`). Each slugged field becomes a
-   `variable_field` entry with `generator: derived from testRunId`. This prevents parallel or
-   sequential test runs from interfering with each other when there is no scope entity to partition
-   the data.
+   **Exception — apps without natural per-run isolation:** if your scoping analysis determined
+   the app lacks natural multi-tenant isolation, **reverse the default**. Slug ALL identifying
+   fields — names, titles, descriptions, labels, slugs, emails, usernames — with inline
+   `{{testRunId}}` so every value a test might search, type, or assert on screen is unique to
+   that test run. Pattern: `Concrete Value {{testRunId}}` (e.g. `Acme Corp {{testRunId}}`).
+   Each slugged field becomes a `variable_field` entry with `generator: derived from testRunId`.
 
    Use variable fields sparingly. Only mark a value as variable when at least one of these is true:
    - the field must be globally unique or is highly collision-prone across runs
@@ -83,10 +93,8 @@ You generate test data scenarios from a knowledge base. Your inputs are `autonom
    constraint enforced by the database or application **must** be variable — hardcoding them
    will cause test failures when the hardcoded value expires or collides.
 
-   Do not mark a field as variable just because:
-   - it is user-facing text
-   - it could be unique in theory
-   - you want to avoid choosing a concrete literal
+   Do not mark a field as variable just because it is user-facing text, could be unique in
+   theory, or you want to avoid choosing a concrete literal.
 
    Every variable field must have:
    - a double-curly token such as `{{project_title}}`
@@ -95,20 +103,46 @@ You generate test data scenarios from a knowledge base. Your inputs are `autonom
    - a reason explaining why it truly must vary
    - a plain-language test reference such as `({{project_title}} variable)`
 
-   `generator` is optional. If you include it, use a short free-form strategy note such as
-   `derived from testRunId`, `planner literal plus discriminator`, `backend-generated`, `UUID suffix`,
-   or `timestamp-based`.
+   `generator` is optional. Use a short free-form strategy note such as `derived from testRunId`,
+   `planner literal plus discriminator`, `backend-generated`, `UUID suffix`, or `timestamp-based`.
    Do not default to `faker`. Prefer deterministic derivation from stable inputs, and use `faker`
-   only as a last resort when deterministic strategies are not practical.
+   only as a last resort.
 
-   Good:
-   - use a concrete value such as `Acme Workspace qa-17` when the planner can safely choose it and append a discriminator
-   - only `{{owner_email}}` is variable because login requires uniqueness across runs
+10. **Nested tree constraint.** Design scenario entity tables so they can be expressed as a
+    nested tree rooted at the scope entity. Step 4 (env-factory) and Step 5 (scenario-validator)
+    will convert scenarios into nested `create` payloads — flat cross-model structures connected
+    only by `_ref` break when JSON key order is not preserved. Children must nest under their
+    parent using the relation field names from the audit. Use `_ref` only for cross-branch
+    references that cannot be expressed through nesting.
 
-   Bad:
-   - every user name, organization name, and label is variable with `faker.*` by default
+11. **Standalone vs via-owner choice.** For every model that appears in a scenario, consult
+    the audit and pick one of two paths:
 
-7. Write the output to `autonoma/scenarios.md`.
+    - If the model has `independently_created: true` and the scenario narrative wants it
+      in isolation (e.g. the user creates a child directly, independent of any root), add
+      it as a top-level tree node. The SDK will call its factory directly.
+    - If the model appears in some owner's `created_by` list and the scenario narrative
+      already includes that owner (e.g. the scenario already has the root, and a default
+      child / onboarding row / deployment row comes along for free), **do NOT add the
+      model as a separate node**. It is created as a side effect of the owner's factory.
+      Quote the `why` from the audit in the scenario prose so the reader knows where it
+      came from.
+
+    **Dual models** (`independently_created: true` AND listed in someone's `created_by`)
+    get to pick per-scenario:
+
+    - Narrative where the root is being created for the first time → the child comes in
+      via the owner (via-owner path).
+    - Narrative where the root already exists and the user is creating a standalone child
+      → the child is a top-level node (standalone-factory path); its owner is also in
+      the tree, as its FK parent.
+
+    Never double-create a dependent. If the audit says an owner mints a dependent row
+    inline, and your scenario has that owner, the dependent must not appear as a separate
+    tree node — the factory already creates it, and adding it twice will either fail
+    uniqueness checks or produce confusing test state.
+
+12. Write the output to `autonoma/scenarios.md`.
 
 ## CRITICAL: Output Format
 
@@ -136,12 +170,6 @@ entity_types:
   - name: "Test"
   - name: "Run"
   - name: "Folder"
-discover:
-  source: sdk
-  model_count: 12
-  edge_count: 18
-  relation_count: 16
-  scope_field: "organizationId"
 variable_fields:
   - token: "{{project_title}}"
     entity: "Project.title"
@@ -152,7 +180,6 @@ variable_fields:
     reason: "title must be unique per test run"
     test_reference: "({{project_title}} variable)"
 planning_sections:
-  - sdk_discover
   - schema_summary
   - relationship_map
   - variable_data_strategy
@@ -169,33 +196,28 @@ planning_sections:
   - `total_entities`: Total count of entities created in this scenario
 - **entity_types**: List of ALL entity types discovered in the data model. Each has:
   - `name`: Entity type name (e.g., "User", "Project", "Run")
-- **discover**: Summary of the SDK discover artifact. It must include:
-  - `source`: exactly `sdk`
-  - `model_count`, `edge_count`, `relation_count`: counts from `autonoma/discover.json`
-  - `scope_field`: scope field name from `autonoma/discover.json`
-- **variable_fields**: List of generated or per-run values that tests must not treat as hardcoded literals.
-  Each entry has:
+- **variable_fields**: List of generated or per-run values that tests must not treat as
+  hardcoded literals. May be `[]` if no variable fields are needed. Each entry has:
   - `token`: double-curly placeholder such as `{{project_title}}`
   - `entity`: entity field path such as `Project.title`
   - `scenarios`: list of scenario names that use this variable
   - `reason`: why this field must be generated
   - `test_reference`: how tests should refer to the value in natural language
-  - optional `generator`: free-form generation hint such as `derived from testRunId` or `backend-generated`
+  - optional `generator`: free-form generation hint such as `derived from testRunId`
 - **planning_sections**: A list describing which planning artifacts are present. It must include:
-  - `sdk_discover`
   - `schema_summary`
   - `relationship_map`
   - `variable_data_strategy`
-  - (optional) `scoping_analysis` — include this when the app lacks natural per-run isolation and you need to explain why fields were aggressively slugged with `{{testRunId}}`
+  - (optional) `scoping_analysis` — include this when the app lacks natural per-run isolation
+    and you need to explain why fields were aggressively slugged with `{{testRunId}}`
 
 ### After the frontmatter
 
 The rest of the file follows the standard scenarios.md format from the fetched instructions:
-- Include a `## SDK Discover` section summarizing the schema counts and scope field.
-- Include a `## Schema Summary` section listing the key models and required fields that drive the scenarios.
-- Include a `## Relationship Map` section describing the important parent/child and FK relationships.
-- Include a `## Variable Data Strategy` section explaining which values are generated and how tests should reference them.
-- (Optional) Include a `## Scoping Analysis` section if the app lacks natural per-run isolation — explain why fields were aggressively slugged with `{{testRunId}}` and what isolation boundary the slugging replaces.
+- Include a `## Schema Summary` section listing the key models and required fields driving the scenarios.
+- Include a `## Relationship Map` section describing parent/child and FK relationships.
+- Include a `## Variable Data Strategy` section explaining which values are generated and how tests reference them.
+- (Optional) Include a `## Scoping Analysis` section if the app lacks natural per-run isolation.
 - Scenario: `standard` (credentials, entity tables with concrete data, aggregate counts)
 - Scenario: `empty` (credentials, all entity types listed as None)
 - Scenario: `large` (credentials, high-volume data described in aggregate)
@@ -207,28 +229,24 @@ you'll receive an error message. Fix the issue and rewrite the file.
 
 The validation checks:
 - File starts with `---` (YAML frontmatter)
-- Frontmatter contains scenario_count, scenarios, entity_types, discover, variable_fields
-- Frontmatter contains planning_sections metadata
+- Frontmatter contains scenario_count, scenarios, entity_types, variable_fields, planning_sections
 - scenarios list length matches scenario_count
 - Required scenarios (standard, empty, large) are present
 - Each scenario has name, description, entity_types, total_entities
 - entity_types is a non-empty list with name fields
-- discover includes sdk source, schema counts, and scope field
 - variable_fields entries use double-curly tokens and known scenario names
-- planning_sections includes sdk_discover, schema_summary, relationship_map, and variable_data_strategy
+- planning_sections includes schema_summary, relationship_map, and variable_data_strategy
 
 ## Important
 
 - **The scenario data is a contract.** Fixed values are hard assertions; variable fields are explicit placeholders.
-- Prefer concrete literals for seed data unless the field truly must vary across runs.
+- Prefer concrete literals unless the field truly must vary across runs.
 - Use variables sparingly. A smaller, justified variable list is better than marking every identity field dynamic.
-- Do not default to `faker`. Prefer deterministic strategies such as planner-chosen literals with stable discriminator conventions, deriving from `testRunId`, or backend-generated values.
-- If a field can safely be a concrete literal for review and testing, keep it concrete.
-- Only include `generator` when the generation mechanism is important to communicate.
+- Do not default to `faker`. Prefer deterministic strategies — planner-chosen literals with stable discriminators, derivation from `testRunId`, or backend-generated values.
 - Every value must be concrete — not "some applications" but "3 applications: Marketing Website, Android App, iOS App"
 - Every relationship must be explicit — which entities belong to which
 - Every enum value must be covered in `standard`
-- Use the SDK discover output instead of re-deriving the schema from local code
-- If the discover artifact is missing, ask the user to provide a working SDK discover response
-- Only use `{{testRunId}}` as a template token — do not invent custom variable tokens like `{{user_email_alice}}`. The SDK template engine only resolves built-in expressions (`{{testRunId}}`, `{{index}}`, `{{cycle(...)}}`, etc.). Custom tokens cause a runtime error when the dashboard sends the payload directly to the endpoint. If a field needs uniqueness, inline the testRunId directly: e.g. `alice-{{testRunId}}@test.local`
-- Design scenario entity tables so they can be expressed as a nested tree rooted at the scope entity. The Step 4 agent will convert scenarios into nested `create` payloads — flat cross-model `_ref` only structures break when JSON key order is not preserved
+- Use subagents to parallelize data model discovery
+- Only use `{{testRunId}}` as a template token in scenario BODIES (field values). Custom tokens like `{{user_email_alice}}` are only valid in `variable_fields` declarations — when the SDK resolves payloads at runtime it only knows built-in expressions (`{{testRunId}}`, `{{index}}`, `{{cycle(...)}}`). If a field needs uniqueness inside the scenario body, inline testRunId: e.g. `alice-{{testRunId}}@test.local`.
+- Design scenarios so each entity table can be serialised as a nested tree rooted at the scope entity. Flat cross-model `_ref`-only structures break when JSON key order is not preserved.
+- If the audit does not describe a model you need, ask the user rather than guessing.

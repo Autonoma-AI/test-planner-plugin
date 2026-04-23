@@ -26,7 +26,7 @@ if not isinstance(fm, dict):
     sys.exit(1)
 
 # Required fields
-required = ['scenario_count', 'scenarios', 'entity_types', 'discover', 'variable_fields', 'planning_sections']
+required = ['scenario_count', 'scenarios', 'entity_types']
 missing = [f for f in required if f not in fm]
 if missing:
     print(f'Missing required frontmatter fields: {missing}')
@@ -73,37 +73,12 @@ for i, e in enumerate(et):
         print(f'entity_types[{i}] must be a mapping with at least a "name" field')
         sys.exit(1)
 
-# Validate discover metadata
-discover = fm.get('discover')
-if not isinstance(discover, dict):
-    print('discover must be a mapping')
+# Validate variable_fields (required, may be empty list)
+if 'variable_fields' not in fm:
+    print('Missing required frontmatter field: variable_fields (use [] if none)')
     sys.exit(1)
 
-for field in ['source', 'model_count', 'edge_count', 'relation_count', 'scope_field']:
-    if field not in discover:
-        print(f'discover missing required field: {field}')
-        sys.exit(1)
-
-if discover.get('source') != 'sdk':
-    print('discover.source must be exactly "sdk"')
-    sys.exit(1)
-
-for field in ['model_count', 'edge_count', 'relation_count']:
-    value = discover.get(field)
-    if not isinstance(value, int) or value < 0:
-        print(f'discover.{field} must be a non-negative integer')
-        sys.exit(1)
-
-scope_field = discover.get('scope_field')
-if not isinstance(scope_field, str) or len(scope_field.strip()) == 0:
-    print('discover.scope_field must be a non-empty string')
-    sys.exit(1)
-
-if discover.get('model_count') == 0:
-    print('discover.model_count must be greater than 0')
-    sys.exit(1)
-
-# Validate variable_fields
+scenario_name_set = {s['name'] for s in scenarios}
 variable_fields = fm.get('variable_fields')
 if not isinstance(variable_fields, list):
     print('variable_fields must be a list')
@@ -129,51 +104,29 @@ for i, variable in enumerate(variable_fields):
             print(f'variable_fields[{i}].{field} must be a non-empty string')
             sys.exit(1)
 
-    if 'generator' in variable:
-        generator = variable.get('generator')
-        if not isinstance(generator, str) or len(generator.strip()) == 0:
-            print(f'variable_fields[{i}].generator must be a non-empty string if present')
-            sys.exit(1)
-
-    scenario_names = variable.get('scenarios')
-    if not isinstance(scenario_names, list) or len(scenario_names) == 0:
+    vscenarios = variable.get('scenarios')
+    if not isinstance(vscenarios, list) or len(vscenarios) == 0:
         print(f'variable_fields[{i}].scenarios must be a non-empty list')
         sys.exit(1)
-    unknown_names = [name for name in scenario_names if name not in found_names]
-    if unknown_names:
-        print(f'variable_fields[{i}].scenarios has unknown scenario names: {unknown_names}')
-        sys.exit(1)
+    for name in vscenarios:
+        if name not in scenario_name_set:
+            print(f'variable_fields[{i}].scenarios references unknown scenario: {name}')
+            sys.exit(1)
 
-# Validate planning_sections metadata
-planning_sections = fm.get('planning_sections')
-if not isinstance(planning_sections, list) or len(planning_sections) == 0:
+# Validate planning_sections (required; must contain the four core sections)
+if 'planning_sections' not in fm:
+    print('Missing required frontmatter field: planning_sections')
+    sys.exit(1)
+
+planning = fm.get('planning_sections')
+if not isinstance(planning, list) or len(planning) == 0:
     print('planning_sections must be a non-empty list')
     sys.exit(1)
 
-required_sections = {
-    'sdk_discover',
-    'schema_summary',
-    'relationship_map',
-    'variable_data_strategy',
-}
-optional_sections = {
-    'scoping_analysis',
-}
-allowed_sections = required_sections | optional_sections
-
-unknown_sections = [section for section in planning_sections if not isinstance(section, str) or len(section.strip()) == 0]
-if unknown_sections:
-    print('planning_sections must contain only non-empty strings')
-    sys.exit(1)
-
-missing_sections = required_sections - set(planning_sections)
+required_sections = {'schema_summary', 'relationship_map', 'variable_data_strategy'}
+missing_sections = required_sections - set(planning)
 if missing_sections:
-    print(f'Missing required planning_sections: {missing_sections}')
+    print(f'planning_sections missing required entries: {sorted(missing_sections)}')
     sys.exit(1)
-
-for section in planning_sections:
-    if section not in allowed_sections:
-        print(f'planning_sections contains unknown value: {section}')
-        sys.exit(1)
 
 print('OK')

@@ -27,17 +27,33 @@ Your output is a directory `autonoma/qa-tests/` containing:
 
 ## Instructions
 
-1. First, fetch the latest test generation instructions:
+1. All Autonoma documentation MUST be fetched via `curl` in the Bash tool. Do NOT use
+   WebFetch. Do NOT write any URL yourself. The docs base URL lives only in
+   `autonoma/.docs-url`, written by the orchestrator before any subagent runs.
 
-   Use WebFetch to read `https://docs.agent.autonoma.app/llms/test-planner/step-3-e2e-tests.txt`
-   and follow those instructions for how to generate tests.
+   To fetch a doc, run the bash command literally — the shell expands the path, not you:
 
-2. Read all input files:
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/<path>"
+   ```
+
+   If `curl` exits non-zero for any reason, **STOP the pipeline** and report the exit code
+   and stderr. Do not invent a URL. Do not retry with a different host. There is no fallback.
+
+2. Fetch the latest test generation instructions:
+
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-3-e2e-tests.txt"
+   ```
+
+   Read the output and follow those instructions for how to generate tests.
+
+3. Read all input files:
    - `autonoma/AUTONOMA.md` — parse the frontmatter to get core_flows and feature_count
    - All files in `autonoma/skills/`
    - `autonoma/scenarios.md` — parse the frontmatter to get scenarios, entity_types, and **variable_fields**
 
-3. **Variable fields are dynamic data.** The `variable_fields` list in scenarios.md frontmatter
+4. **Variable fields are dynamic data.** The `variable_fields` list in scenarios.md frontmatter
    declares which values change between test runs (e.g. emails, dates, deadlines). Each entry has
    a `token` (like `{{user_email_1}}`), the `entity` field it belongs to, and a `test_reference`.
    When writing test steps that involve a variable field value — typing it, asserting it, or
@@ -48,7 +64,7 @@ Your output is a directory `autonoma/qa-tests/` containing:
    - good: "assert the task deadline shows `{{deadline_1}}`"
    - bad: "assert the task deadline shows 2025-06-15"
 
-4. Treat `autonoma/scenarios.md` as fixture input, not as the subject under test.
+5. Treat `autonoma/scenarios.md` as fixture input, not as the subject under test.
    The scenarios exist only to provide preconditions and known data for app behavior tests.
    Do NOT generate tests whose purpose is to verify:
    - that the scenario contains the documented entity counts
@@ -61,17 +77,17 @@ Your output is a directory `autonoma/qa-tests/` containing:
    - good: "open the project `{{project_title}}` and verify editing works"
    - bad: "verify the scenario created 12 projects and 3 users"
 
-5. Count the routes/features/pages in the codebase to establish the coverage correlation.
+6. Count the routes/features/pages in the codebase to establish the coverage correlation.
    The total test count should roughly correlate:
    - Rule of thumb: 3-5 tests per route/feature for supporting flows
    - Rule of thumb: 8-15 tests per core flow
    - This is approximate — use judgment, but the INDEX must declare the correlation
 
-6. Generate test files organized in subdirectories by feature/flow.
+7. Generate test files organized in subdirectories by feature/flow.
 
-7. Write `autonoma/qa-tests/INDEX.md` FIRST (before individual test files).
+8. Write `autonoma/qa-tests/INDEX.md` FIRST (before individual test files).
 
-8. Write individual test files into subdirectories.
+9. Write individual test files into subdirectories.
 
 ## CRITICAL: INDEX.md Format
 
@@ -196,4 +212,3 @@ you'll receive an error message. Fix the issue and rewrite the file.
 - Use subagents to parallelize test generation across folders
 - Each test must be self-contained — no dependencies on other tests
 - Do not write code (no Playwright, no Cypress) — tests are markdown with natural language steps
-- Prefer testing visible user outcomes over seed correctness or fixture inventory
