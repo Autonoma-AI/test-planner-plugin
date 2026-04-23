@@ -1,8 +1,28 @@
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pipeline-kickoff.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pretool-heartbeat.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
-        "matcher": "Write",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",

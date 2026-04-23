@@ -1,56 +1,80 @@
 # Autonoma Test Planner Plugin
 
-Claude Code plugin that generates E2E test suites through a 4-step deterministic pipeline.
+Claude Code plugin that generates E2E test suites through a deterministic multi-step pipeline.
 
 ## Project Structure
 
-```
-.claude-plugin/           # Plugin manifest (plugin.json, marketplace.json)
-commands/generate-tests.md  # Entry point — dispatches the 4-step pipeline
-skills/generate-tests/SKILL.md  # Orchestrator skill
-agents/                   # Isolated subagents (one per step)
-  kb-generator.md         # Step 1: Knowledge base → autonoma/AUTONOMA.md + features.json
-  scenario-generator.md   # Step 2: Scenarios → autonoma/scenarios.md
-  test-case-generator.md  # Step 3: Tests → autonoma/qa-tests/INDEX.md + test files
-  env-factory-generator.md # Step 4: Environment factory endpoint
+```text
+.claude-plugin/              # Plugin manifest
+commands/generate-tests.md   # Full pipeline command
+commands/generate-adhoc-tests.md
+skills/generate-tests/SKILL.md
+skills/generate-adhoc-tests/SKILL.md
+agents/
+  kb-generator.md              # Step 1: Knowledge base
+  entity-audit-generator.md    # Step 2: Entity creation audit
+  scenario-generator.md        # Step 3: Scenarios
+  env-factory-generator.md     # Step 4: Environment Factory implementation
+  scenario-validator.md        # Step 5: Scenario lifecycle validation
+  test-case-generator.md       # Step 6: E2E tests
+  focused-test-case-generator.md
 hooks/
-  hooks.json              # PostToolUse hook config (triggers on Write)
-  validate-pipeline-output.sh  # Bash dispatcher → routes to Python validators
-  validators/             # Python scripts that validate YAML frontmatter
+  hooks.json
+  pipeline-kickoff.sh
+  pretool-heartbeat.sh
+  transcript-streamer.py
+  validate-pipeline-output.sh
+  preflight_scenario_recipes.py
+  validators/
+    evals/
+tests/
 ```
 
-## How the Pipeline Works
+## Pipeline
 
-Each step spawns an isolated subagent. After each Write, the PostToolUse hook in `hooks/hooks.json` runs `validate-pipeline-output.sh`, which pattern-matches the file path and runs the appropriate Python validator. Validators exit 0 (OK) or 2 (block with error message).
+1. Knowledge Base
+2. Entity Creation Audit
+3. Scenarios
+4. Implement Environment Factory
+5. Validate Scenario Lifecycle
+6. Generate E2E Tests
 
-Steps 1-3 require user confirmation before advancing. Step 4 is the final step (no gate).
+The full pipeline is interactive. After steps 1-5, Claude presents the step summary and waits for user confirmation before continuing. Lifecycle reporting is handled by plugin hooks, not by ad hoc agent curl calls.
 
 ## Validation
 
-Validators are in `hooks/validators/`. They parse YAML frontmatter and check required fields, types, and cross-file consistency. All validators print "OK" on success or an error message on failure.
+Validators are in `hooks/validators/`.
 
 | Validator | File matched | Key checks |
 |-----------|-------------|------------|
-| `validate_kb.py` | `*/autonoma/AUTONOMA.md` | app_name, app_description (≥20 chars), core_flows with at least one `core: true` |
-| `validate_features.py` | `*/autonoma/features.json` | features array length matches total_features, valid types, at least one core feature |
-| `validate_scenarios.py` | `*/autonoma/scenarios.md` | scenario_count ≥ 3, standard/empty/large scenarios present, entity_types |
-| `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | test totals match folder sums, criticality sums, cross-checks against features.json |
-| `validate_test_file.py` | `*/autonoma/qa-tests/*/[!I]*.md` | title, description, criticality (critical/high/mid/low), scenario, flow |
+| `validate_kb.py` | `*/autonoma/AUTONOMA.md` | frontmatter and core-flow structure |
+| `validate_features.py` | `*/autonoma/features.json` | feature inventory schema |
+| `validate_entity_audit.py` | `*/autonoma/entity-audit.md` | model creation classification and owner links |
+| `validate_scenarios.py` | `*/autonoma/scenarios.md` | scenario count, metadata, required sections |
+| `validate_endpoint_implemented.py` | `*/autonoma/.endpoint-implemented` | handler path and factory integrity |
+| `validate_creation_file_immutable.py` | `*/autonoma/.endpoint-implemented` | accepted audit creation files were not rewritten unsafely |
+| `validate_factory_fidelity.py` | `*/autonoma/.endpoint-implemented` | semantic per-model factory fidelity |
+| `validate_scenario_validation.py` | `*/autonoma/.scenario-validation.json` | Step 5 terminal-state contract |
+| `validate_scenario_recipes.py` | `*/autonoma/scenario-recipes.json` | recipe schema |
+| `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | test totals and folder sums |
+| `validate_directory_structure.py` | `*/autonoma/qa-tests/INDEX.md` | test directory structure |
+| `validate_test_file.py` | `*/autonoma/qa-tests/*/[!I]*.md` | test frontmatter |
+
+Scenario recipes also run live endpoint preflight through `hooks/preflight_scenario_recipes.py`.
+
+Test file writes are blocked until `autonoma/.endpoint-validated` exists.
 
 ## Development
 
 ```bash
-# Run plugin locally without installing
 claude --plugin-dir ./
-
-# Validate plugin structure
 claude plugin validate ./
+pytest
 ```
 
-## Dependencies
+## Notes
 
-- Python 3 + PyYAML (auto-installed by the hook if missing)
-
-## Known Issues
-
-- `commands/generate-tests.md` has unresolved merge conflicts between the AskUserQuestion approach and the end-turn approach for user confirmation between steps. Resolve before merging to main.
+- Step 4 implements the Environment Factory and may edit target backend code.
+- Step 4 writes `autonoma/.endpoint-implemented` only after discover smoke and factory-integrity checks pass.
+- Step 5 validates signed `discover` / `up` / `down` for every scenario and may fix handler bugs or reconcile `scenarios.md`.
+- Step 6 is gated on `autonoma/.endpoint-validated`.

@@ -21,22 +21,38 @@ You generate a structured knowledge base for a codebase. Your output MUST be wri
 
 ## Instructions
 
-1. First, fetch the latest knowledge base generation instructions:
+1. All Autonoma documentation MUST be fetched via `curl` in the Bash tool. Do NOT use
+   WebFetch. Do NOT write any URL yourself. The docs base URL lives only in
+   `autonoma/.docs-url`, written by the orchestrator before any subagent runs.
 
-   Use WebFetch to read `https://docs.agent.autonoma.app/llms/test-planner/step-1-knowledge-base.txt`
-   and follow those instructions for how to analyze the codebase.
+   To fetch a doc, run the bash command literally — the shell expands the path, not you:
 
-2. Create the output directory if it doesn't exist:
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/<path>"
+   ```
+
+   If `curl` exits non-zero for any reason, **STOP the pipeline** and report the exit code
+   and stderr. Do not invent a URL. Do not retry with a different host. There is no fallback.
+
+2. Fetch the latest knowledge base generation instructions:
+
+   ```bash
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-1-knowledge-base.txt"
+   ```
+
+   Read the output and follow those instructions for how to analyze the codebase.
+
+3. Create the output directory if it doesn't exist:
    ```bash
    mkdir -p autonoma/skills
    ```
 
-3. Follow the fetched instructions to analyze the codebase — discover the application,
+4. Follow the fetched instructions to analyze the codebase — discover the application,
    map pages and flows, identify core workflows.
 
-4. Write the output to `autonoma/AUTONOMA.md`.
+5. Write the output to `autonoma/AUTONOMA.md`.
 
-5. Write `autonoma/features.json` — a machine-readable inventory of every feature discovered.
+6. Write `autonoma/features.json` — a machine-readable inventory of every feature discovered.
 
 ## CRITICAL: Output Format
 
