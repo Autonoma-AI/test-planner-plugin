@@ -7,6 +7,21 @@ from pathlib import Path
 
 VALIDATORS_DIR = os.path.join(os.path.dirname(__file__), '..', 'hooks', 'validators')
 sys.path.insert(0, str(Path(VALIDATORS_DIR).resolve()))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _ensure_test_requirements() -> None:
+    try:
+        import pydantic  # noqa: F401
+    except ImportError:
+        subprocess.check_call(
+            [sys.executable, '-m', 'pip', 'install', '-r', str(REPO_ROOT / 'requirements.txt')],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
+_ensure_test_requirements()
 
 
 def run_validator(script_name: str, content: str, filename: str = 'test.md') -> tuple[int, str]:
