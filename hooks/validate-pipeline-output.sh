@@ -207,7 +207,7 @@ esac
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATORS_DIR="$SCRIPT_DIR/validators"
 
-python3 -c "import yaml" 2>/dev/null || pip3 install pyyaml -q 2>/dev/null
+python3 -c "import yaml, pydantic" 2>/dev/null || pip3 install pyyaml pydantic -q 2>/dev/null
 
 STEP_COMPLETED=""
 STEP_COMPLETED_NAME=""
