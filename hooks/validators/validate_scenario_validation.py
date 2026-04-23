@@ -64,4 +64,28 @@ parsed = urlparse(endpoint_url)
 if parsed.scheme not in {"http", "https"} or not parsed.netloc:
     fail("endpointUrl must be an absolute http/https URL")
 
+# Login probe result — required when status == "ok" so .endpoint-validated is
+# never written unless at least one scenario proved that the returned auth
+# actually reaches a logged-in state in a real browser. Skipped results (e.g.
+# agent-browser unavailable) are accepted but flagged so the SDK consumer can
+# decide whether to gate on the probe or only on lifecycle success.
+probe = payload.get("loginProbe")
+if payload.get("status") == "ok":
+    if not isinstance(probe, dict):
+        fail("loginProbe must be an object when status is 'ok'")
+    if "ok" not in probe or not isinstance(probe["ok"], bool):
+        fail("loginProbe.ok must be a boolean")
+    skipped = bool(probe.get("skipped"))
+    if not probe["ok"] and not skipped:
+        fail("loginProbe.ok is false — status cannot be 'ok' while login probe failed")
+    if probe["ok"]:
+        mode = probe.get("mode")
+        if mode not in {"cookies", "token", "form"}:
+            fail("loginProbe.mode must be one of 'cookies', 'token', 'form' when ok")
+        scenario = probe.get("scenario")
+        if not isinstance(scenario, str) or not scenario.strip():
+            fail("loginProbe.scenario must be a non-empty string when ok")
+elif probe is not None and not isinstance(probe, dict):
+    fail("loginProbe, when present, must be an object")
+
 print("OK")

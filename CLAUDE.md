@@ -16,8 +16,11 @@ agents/
   scenario-generator.md        # Step 3: Scenarios
   env-factory-generator.md     # Step 4: Environment Factory implementation
   scenario-validator.md        # Step 5: Scenario lifecycle validation
+  auth-login-validator.md      # Step 5: agentic fallback for login probe
   test-case-generator.md       # Step 6: E2E tests
   focused-test-case-generator.md
+skills/agent-browser/SKILL.md        # agent-browser CLI reference
+skills/validate-auth-login/SKILL.md  # headless browser login probe
 hooks/
   hooks.json
   pipeline-kickoff.sh
@@ -54,7 +57,8 @@ Validators are in `hooks/validators/`.
 | `validate_endpoint_implemented.py` | `*/autonoma/.endpoint-implemented` | handler path and factory integrity |
 | `validate_creation_file_immutable.py` | `*/autonoma/.endpoint-implemented` | accepted audit creation files were not rewritten unsafely |
 | `validate_factory_fidelity.py` | `*/autonoma/.endpoint-implemented` | semantic per-model factory fidelity |
-| `validate_scenario_validation.py` | `*/autonoma/.scenario-validation.json` | Step 5 terminal-state contract |
+| `validate_scenario_validation.py` | `*/autonoma/.scenario-validation.json` | Step 5 terminal-state contract (incl. `loginProbe`) |
+| `login_probe.py` | invoked by `scenario-validator.md` between `up` and `down` | headless-browser login verification via `agent-browser` |
 | `validate_scenario_recipes.py` | `*/autonoma/scenario-recipes.json` | recipe schema |
 | `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | test totals and folder sums |
 | `validate_directory_structure.py` | `*/autonoma/qa-tests/INDEX.md` | test directory structure |
@@ -76,5 +80,5 @@ pytest
 
 - Step 4 implements the Environment Factory and may edit target backend code.
 - Step 4 writes `autonoma/.endpoint-implemented` only after discover smoke and factory-integrity checks pass.
-- Step 5 validates signed `discover` / `up` / `down` for every scenario and may fix handler bugs or reconcile `scenarios.md`.
+- Step 5 validates signed `discover` / `up` / `down` for every scenario and may fix handler bugs or reconcile `scenarios.md`. Between `up` and `down` on the first auth-carrying scenario it also runs the login probe (`hooks/validators/login_probe.py`), which drives headless Chrome via [`agent-browser`](https://github.com/vercel-labs/agent-browser) to prove the returned credentials actually reach a logged-in page. Install via `brew install agent-browser` or `npm install -g agent-browser`; the probe skips cleanly if the binary is missing.
 - Step 6 is gated on `autonoma/.endpoint-validated`.

@@ -118,8 +118,54 @@ Repeat until all three actions succeed for every scenario OR you exhaust 5 itera
       - **Auth check**: `auth` MUST be non-null and contain at least one of `{ cookies, headers, token, user }`. If empty, the auth callback is not wired — fix it and restart.
       - **Refs check**: every top-level model in the `create` tree MUST appear in `refs`.
    5. Verify DB state with a read-only `SELECT` for at least one refs id.
-   6. POST `{action:"down", refsToken}`. Expect `{ok:true}`.
-   7. Verify the refs rows are gone.
+   6. **Login probe** (once per run — on the first scenario whose `auth`
+      carries credentials, then remember the verdict):
+      Drive a real headless Chrome session through `hooks/validators/login_probe.py`
+      to prove that the returned `auth` actually reaches a logged-in page. This
+      catches subtle auth-callback bugs (wrong cookie domain, missing CSRF seed,
+      token not honored, Set-Cookie attrs stripped) that lifecycle checks miss.
+      ```bash
+      # $KB is autonoma/AUTONOMA.md. Extract loginPath + protectedPath from the
+      # `flows: login` section there. `markerText` is optional — if the KB lists
+      # a known post-login text fragment ("Dashboard", username echo, etc.) pass it.
+      python3 "$(cat /tmp/autonoma-plugin-root)/hooks/validators/login_probe.py" \
+        --input - <<JSON
+      {
+        "baseUrl": "$BASE_URL",
+        "loginPath": "$LOGIN_PATH",
+        "protectedPath": "$PROTECTED_PATH",
+        "markerText": "$MARKER_TEXT",
+        "screenshotDir": "autonoma/.login-probe",
+        "label": "$SCENARIO_NAME",
+        "auth": $AUTH_JSON
+      }
+      JSON
+      ```
+      Interpret the JSON verdict (same file — `{ok, mode, failure.category, ...}`):
+        - `ok: true` → record `loginProbe: { ok: true, mode, scenario: "$SCENARIO_NAME", evidence }`
+          in the terminal artifact (step 7) and skip the probe for the remaining
+          scenarios — one successful probe per run is sufficient signal.
+        - `skipped: true` (no cookies/headers/user OR `agent-browser` not installed) →
+          record the skip payload verbatim and continue. Do not treat as failure.
+        - `ok: false` → this is a **handler bug** (path 3a above). The failure
+          `category` tells you what to fix:
+            - `redirected_to_login` → the cookie/token reached the server but was
+              rejected. Check the auth callback's signing/session secret and cookie
+              value format.
+            - `cookie_not_sent` → browser refused to attach the cookie. Check
+              `domain`, `path`, `Secure`, `SameSite`, `HttpOnly` attrs on Set-Cookie.
+            - `marker_missing` → redirect succeeded but page didn't render the
+              expected post-login marker. Either the marker is wrong (update KB)
+              or a downstream load fails (inspect screenshot, fix handler).
+            - `bad_credentials` → form submit with the user's password didn't
+              authenticate. The `user` payload the auth callback returns doesn't
+              match the real credentials stored in the DB.
+            - `open_failed` / `fill_failed` / `submit_failed` → browser-side
+              infrastructure issue, inspect `failure.detail`.
+          Fix the handler and restart the loop. Do NOT move on to `down` for this
+          scenario — the session artifacts from a broken `up` aren't trustworthy.
+   7. POST `{action:"down", refsToken}`. Expect `{ok:true}`.
+   8. Verify the refs rows are gone.
 
 5. After every scenario passes cleanly, emit the scenario recipes.
 
@@ -208,9 +254,19 @@ Repeat until all three actions succeed for every scenario OR you exhaust 5 itera
      "blockingIssues": [],
      "recipePath": "autonoma/scenario-recipes.json",
      "validationMode": "endpoint-lifecycle",
-     "endpointUrl": "http://localhost:3000/api/autonoma"
+     "endpointUrl": "http://localhost:3000/api/autonoma",
+     "loginProbe": {
+       "ok": true,
+       "mode": "cookies",
+       "scenario": "standard",
+       "evidence": { "final_url": "http://localhost:3000/dashboard" }
+     }
    }
    ```
+
+   `loginProbe` is REQUIRED when `status == "ok"`. Use the verdict from step 4.6.
+   If the probe was skipped (no auth material or `agent-browser` unavailable) record
+   `{ "ok": false, "skipped": true, "reason": "..." }` — that satisfies the schema.
 
    On failure keep the same shape with `status: "failed"`, `preflightPassed: false` when
    preflight did not pass, populated `failedScenarios`, and concrete `blockingIssues`.
