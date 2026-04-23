@@ -47,18 +47,18 @@ Validators are in `hooks/validators/`.
 
 | Validator | File matched | Key checks |
 |-----------|-------------|------------|
-| `validate_kb.py` | `*/autonoma/AUTONOMA.md` | frontmatter and core-flow structure |
-| `validate_features.py` | `*/autonoma/features.json` | feature inventory schema |
-| `validate_entity_audit.py` | `*/autonoma/entity-audit.md` | model creation classification and owner links |
-| `validate_scenarios.py` | `*/autonoma/scenarios.md` | scenario count, metadata, required sections |
+| `validate_kb.py` | `*/autonoma/AUTONOMA.md` | Pydantic frontmatter schema and core-flow structure |
+| `validate_features.py` | `*/autonoma/features.json` | Pydantic feature inventory schema and count consistency |
+| `validate_entity_audit.py` | `*/autonoma/entity-audit.md` | Pydantic model creation classification, owner links, and factory-count autofix |
+| `validate_scenarios.py` | `*/autonoma/scenarios.md` | Pydantic scenario metadata, variable fields, and required planning sections |
 | `validate_endpoint_implemented.py` | `*/autonoma/.endpoint-implemented` | handler path and factory integrity |
 | `validate_creation_file_immutable.py` | `*/autonoma/.endpoint-implemented` | accepted audit creation files were not rewritten unsafely |
 | `validate_factory_fidelity.py` | `*/autonoma/.endpoint-implemented` | semantic per-model factory fidelity |
-| `validate_scenario_validation.py` | `*/autonoma/.scenario-validation.json` | Step 5 terminal-state contract |
-| `validate_scenario_recipes.py` | `*/autonoma/scenario-recipes.json` | recipe schema |
-| `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | test totals and folder sums |
+| `validate_scenario_validation.py` | `*/autonoma/.scenario-validation.json` | Pydantic Step 5 terminal-state contract |
+| `validate_scenario_recipes.py` | `*/autonoma/scenario-recipes.json` | Pydantic recipe schema plus discover.json create-payload cross-checks |
+| `validate_test_index.py` | `*/autonoma/qa-tests/INDEX.md` | Pydantic test totals, folder sums, and features.json coverage cross-checks |
 | `validate_directory_structure.py` | `*/autonoma/qa-tests/INDEX.md` | test directory structure |
-| `validate_test_file.py` | `*/autonoma/qa-tests/*/[!I]*.md` | test frontmatter |
+| `validate_test_file.py` | `*/autonoma/qa-tests/*/[!I]*.md` | Pydantic test frontmatter |
 
 Scenario recipes also run live endpoint preflight through `hooks/preflight_scenario_recipes.py`.
 

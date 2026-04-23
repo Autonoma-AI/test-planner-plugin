@@ -1,9 +1,27 @@
 """Shared helpers for validator tests."""
 import os
 import subprocess
+import sys
 import tempfile
+from pathlib import Path
 
 VALIDATORS_DIR = os.path.join(os.path.dirname(__file__), '..', 'hooks', 'validators')
+sys.path.insert(0, str(Path(VALIDATORS_DIR).resolve()))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _ensure_test_requirements() -> None:
+    try:
+        import pydantic  # noqa: F401
+    except ImportError:
+        subprocess.check_call(
+            [sys.executable, '-m', 'pip', 'install', '-r', str(REPO_ROOT / 'requirements.txt')],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
+_ensure_test_requirements()
 
 
 def run_validator(script_name: str, content: str, filename: str = 'test.md') -> tuple[int, str]:
@@ -14,7 +32,7 @@ def run_validator(script_name: str, content: str, filename: str = 'test.md') -> 
         with open(filepath, 'w') as f:
             f.write(content)
         result = subprocess.run(
-            ['python3', script, filepath],
+            [sys.executable, script, filepath],
             capture_output=True, text=True,
         )
         output = (result.stdout + result.stderr).strip()
@@ -36,7 +54,7 @@ def run_validator_with_dir(script_name: str, files: dict[str, str], target: str)
                 f.write(content)
         filepath = os.path.join(tmpdir, target)
         result = subprocess.run(
-            ['python3', script, filepath],
+            [sys.executable, script, filepath],
             capture_output=True, text=True,
         )
         output = (result.stdout + result.stderr).strip()

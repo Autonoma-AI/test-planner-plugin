@@ -196,14 +196,14 @@ def test_invalid_json():
 def test_missing_required_fields():
     code, out = _run_recipe_validator({'recipes': []})
     assert code == 1
-    assert 'Missing required fields' in out
+    assert 'version: Field required' in out
 
 
 def test_invalid_validation_mode():
     data = {**VALID_DATA, 'validationMode': 'rollback'}
     code, out = _run_recipe_validator(data)
     assert code == 1
-    assert 'validationMode must be one of' in out
+    assert "validationMode: Input should be 'sdk-check'" in out
 
 
 def test_missing_required_recipe_name():
@@ -235,7 +235,7 @@ def test_recipe_requires_create():
     data['recipes'][0]['create'] = {}
     code, out = _run_recipe_validator(data)
     assert code == 1
-    assert 'create must be a non-empty object' in out
+    assert 'recipes[0].create: Dictionary should have at least 1 item' in out
 
 
 def test_validation_status_must_be_validated():
@@ -245,7 +245,7 @@ def test_validation_status_must_be_validated():
     data['recipes'][0]['validation']['status'] = 'draft'
     code, out = _run_recipe_validator(data)
     assert code == 1
-    assert 'validation.status must be exactly "validated"' in out
+    assert "recipes[0].validation.status: Input should be 'validated'" in out
 
 
 def test_validation_phase_must_be_ok():
@@ -255,7 +255,7 @@ def test_validation_phase_must_be_ok():
     data['recipes'][0]['validation']['phase'] = 'up'
     code, out = _run_recipe_validator(data)
     assert code == 1
-    assert 'validation.phase must be exactly "ok"' in out
+    assert "recipes[0].validation.phase: Input should be 'ok'" in out
 
 
 def test_validation_method_must_be_known():
@@ -265,7 +265,7 @@ def test_validation_method_must_be_known():
     data['recipes'][0]['validation']['method'] = 'custom'
     code, out = _run_recipe_validator(data)
     assert code == 1
-    assert 'validation.method must be one of' in out
+    assert "recipes[0].validation.method: Input should be 'checkScenario'" in out
 
 
 # --- Variables validation tests ---
@@ -301,7 +301,7 @@ def test_invalid_variable_strategy():
     data['recipes'][0]['variables']['owner_email']['strategy'] = 'random'
     code, out = _run_recipe_validator(data)
     assert code == 1
-    assert 'strategy must be one of' in out
+    assert "recipes[0].variables.owner_email.strategy: Input should be 'literal'" in out
 
 
 def test_invalid_derived_shape():

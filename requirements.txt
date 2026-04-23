@@ -1,0 +1,3 @@
+PyYAML==6.0.3
+pydantic==2.13.3
+Faker==40.15.0

@@ -48,6 +48,13 @@ auto-advance behavior.
 
 After the generated PR is merged, the user still needs to deploy those env changes.
 
+## Python dependencies
+
+The plugin's Python runtime dependencies are pinned in `requirements.txt`. Update that file
+when changing runtime dependencies, then run `pytest tests/ -v` and `claude plugin validate ./`.
+Runtime hook fallbacks install from `requirements.txt`, so avoid adding hardcoded package
+names to hook scripts.
+
 ## References
 
 - [Claude Code — Discover and install plugins](https://code.claude.com/docs/en/discover-plugins#add-from-github)

@@ -20,7 +20,7 @@ def test_accepts_https_url():
 def test_rejects_empty_content():
     code, out = run_validator(SCRIPT, '', filename='.sdk-endpoint')
     assert code == 1
-    assert 'non-empty URL' in out
+    assert 'url: String should have at least 1 character' in out
 
 
 def test_rejects_relative_path():

@@ -169,6 +169,13 @@ claude plugin validate ./
 pytest
 ```
 
+## Python Dependencies
+
+Plugin Python runtime dependencies are declared with exact pins in `requirements.txt`.
+When a dependency changes, update that file and run the full validator test suite.
+Runtime hook fallbacks install from `requirements.txt` instead of hardcoding package
+names so CI and plugin execution use the same direct dependency set.
+
 ## Project Structure
 
 ```text

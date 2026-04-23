@@ -10,9 +10,11 @@ import hmac
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Variable resolution
@@ -28,7 +30,7 @@ ALLOWED_FAKER_GENERATORS = {
 }
 
 # Seeded Faker generators — deterministic: same (testRunId + ":" + tokenName) → same value.
-# Uses the `Faker` library (pip install Faker) for realistic data generation.
+# Uses the `Faker` library from the plugin's pinned requirements for realistic data generation.
 
 def _seed_int(seed_str: str) -> int:
     return int(hashlib.sha256(seed_str.encode()).hexdigest(), 16)
@@ -297,8 +299,8 @@ def main():
     try:
         import faker  # noqa: F401
     except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'Faker', '-q'],
+        requirements = Path(__file__).resolve().parents[1] / 'requirements.txt'
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', str(requirements), '-q'],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     endpoint = os.environ.get('AUTONOMA_SDK_ENDPOINT')

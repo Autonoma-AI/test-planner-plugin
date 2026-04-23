@@ -1,49 +1,29 @@
 #!/usr/bin/env python3
 """Validates individual test file frontmatter format."""
+from __future__ import annotations
+
 import sys
-import yaml
+from pathlib import Path
 
-filepath = sys.argv[1]
-content = open(filepath).read()
+from pydantic import ValidationError
 
-if not content.startswith('---'):
-    print('File must start with YAML frontmatter (---)')
-    sys.exit(1)
+from schemas.common import format_errors, load_yaml_frontmatter
+from schemas.test_file import TestFileDocument
 
-parts = content.split('---', 2)
-if len(parts) < 3:
-    print('Missing closing --- for frontmatter')
-    sys.exit(1)
 
-try:
-    fm = yaml.safe_load(parts[1])
-except Exception as e:
-    print(f'Invalid YAML in frontmatter: {e}')
-    sys.exit(1)
+def main() -> int:
+    try:
+        fm, _body = load_yaml_frontmatter(Path(sys.argv[1]))
+        TestFileDocument.model_validate(fm)
+    except ValidationError as exc:
+        print(format_errors(exc), file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print("OK")
+    return 0
 
-if not isinstance(fm, dict):
-    print('Frontmatter must be a YAML mapping')
-    sys.exit(1)
 
-# Required fields
-required = ['title', 'description', 'criticality', 'scenario', 'flow']
-missing = [f for f in required if f not in fm]
-if missing:
-    print(f'Missing required frontmatter fields: {missing}')
-    sys.exit(1)
-
-# Validate criticality
-valid_criticality = {'critical', 'high', 'mid', 'low'}
-crit = fm.get('criticality')
-if crit not in valid_criticality:
-    print(f'criticality must be one of {valid_criticality}, got: {crit}')
-    sys.exit(1)
-
-# Validate string fields are non-empty
-for field in ['title', 'description', 'scenario', 'flow']:
-    val = fm.get(field)
-    if not isinstance(val, str) or len(val.strip()) == 0:
-        print(f'{field} must be a non-empty string')
-        sys.exit(1)
-
-print('OK')
+if __name__ == "__main__":
+    sys.exit(main())

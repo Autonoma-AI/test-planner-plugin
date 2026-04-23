@@ -40,7 +40,7 @@ def test_root_not_object():
 def test_missing_required_fields():
     code, out = run_validator(SCRIPT, _json({'features': []}), 'features.json')
     assert code == 1
-    assert 'Missing required fields' in out
+    assert 'total_features: Field required' in out
 
 
 def test_empty_features_array():
@@ -57,7 +57,7 @@ def test_feature_missing_name():
     ], 'total_features': 1}
     code, out = run_validator(SCRIPT, _json(data), 'features.json')
     assert code == 1
-    assert 'missing required field: name' in out
+    assert 'features[0].name: Field required' in out
 
 
 def test_invalid_feature_type():
@@ -66,7 +66,7 @@ def test_invalid_feature_type():
     ], 'total_features': 1}
     code, out = run_validator(SCRIPT, _json(data), 'features.json')
     assert code == 1
-    assert 'must be one of' in out
+    assert "Input should be 'page'" in out
 
 
 def test_total_features_mismatch():
@@ -90,7 +90,7 @@ def test_negative_total_routes():
     data = {**VALID_DATA, 'total_routes': -1}
     code, out = run_validator(SCRIPT, _json(data), 'features.json')
     assert code == 1
-    assert 'total_routes must be a non-negative integer' in out
+    assert 'total_routes: Input should be greater than or equal to 0' in out
 
 
 def test_core_not_boolean():
@@ -99,7 +99,7 @@ def test_core_not_boolean():
     ], 'total_features': 1}
     code, out = run_validator(SCRIPT, _json(data), 'features.json')
     assert code == 1
-    assert 'must be a boolean' in out
+    assert 'features[0].core: Input should be a valid boolean' in out
 
 
 def test_empty_name():
@@ -108,4 +108,4 @@ def test_empty_name():
     ], 'total_features': 1}
     code, out = run_validator(SCRIPT, _json(data), 'features.json')
     assert code == 1
-    assert 'must be a non-empty string' in out
+    assert 'features[0].name: String should have at least 1 character' in out

@@ -206,8 +206,10 @@ esac
 # ----------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATORS_DIR="$SCRIPT_DIR/validators"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REQUIREMENTS_FILE="$PLUGIN_ROOT/requirements.txt"
 
-python3 -c "import yaml" 2>/dev/null || pip3 install pyyaml -q 2>/dev/null
+python3 -c "import yaml, pydantic" 2>/dev/null || python3 -m pip install -r "$REQUIREMENTS_FILE" -q 2>/dev/null
 
 STEP_COMPLETED=""
 STEP_COMPLETED_NAME=""

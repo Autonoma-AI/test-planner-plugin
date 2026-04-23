@@ -69,7 +69,7 @@ def test_missing_required_fields():
     files = _files(content)
     code, out = run_validator_with_dir(SCRIPT, files, 'autonoma/qa-tests/INDEX.md')
     assert code == 1
-    assert 'Missing required frontmatter fields' in out
+    assert 'total_folders: Field required' in out
 
 
 def test_total_tests_zero():
@@ -77,7 +77,7 @@ def test_total_tests_zero():
     files = _files(content)
     code, out = run_validator_with_dir(SCRIPT, files, 'autonoma/qa-tests/INDEX.md')
     assert code == 1
-    assert 'total_tests must be a positive integer' in out
+    assert 'total_tests: Input should be greater than or equal to 1' in out
 
 
 def test_folder_count_mismatch():
@@ -168,7 +168,7 @@ def test_folder_missing_required_field():
     files = _files(index)
     code, out = run_validator_with_dir(SCRIPT, files, 'autonoma/qa-tests/INDEX.md')
     assert code == 1
-    assert 'missing required field' in out
+    assert 'folders[0].low: Field required' in out
 
 
 def test_negative_criticality_value():
@@ -177,4 +177,4 @@ def test_negative_criticality_value():
     files = _files(index)
     code, out = run_validator_with_dir(SCRIPT, files, 'autonoma/qa-tests/INDEX.md')
     assert code == 1
-    assert 'must be a non-negative integer' in out
+    assert 'folders[0].mid: Input should be greater than or equal to 0' in out
