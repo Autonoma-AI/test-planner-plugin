@@ -51,8 +51,8 @@ Repeat until all three actions succeed for every scenario OR you exhaust 5 itera
 1. Fetch the protocol docs (first iteration only):
 
    ```bash
-   curl -sSfL "$(cat autonoma/.docs-url)/llms/protocol.txt"
-   curl -sSfL "$(cat autonoma/.docs-url)/llms/scenarios.txt"
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/guides/environment-factory.txt"
+   curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-5-validate.txt"
    ```
 
    If curl fails, STOP and report — do not fabricate a URL.
@@ -130,6 +130,7 @@ Repeat until all three actions succeed for every scenario OR you exhaust 5 itera
    {
      "version": 1,
      "source": {
+       "discoverPath": "autonoma/discover.json",
        "scenariosPath": "autonoma/scenarios.md"
      },
      "validationMode": "endpoint-lifecycle",
@@ -165,6 +166,7 @@ Repeat until all three actions succeed for every scenario OR you exhaust 5 itera
    Rules:
    - top-level keys MUST be exactly `version`, `source`, `validationMode`, `recipes`
    - `version` must be integer `1`
+   - `source` MUST be an object with BOTH `discoverPath` (path to `autonoma/discover.json`) and `scenariosPath` (path to `autonoma/scenarios.md`). Both are required non-empty strings; the dashboard `/scenario-recipe-versions` endpoint will reject the upload otherwise.
    - `validationMode` must be `sdk-check` or `endpoint-lifecycle` (use `endpoint-lifecycle`
      when you drove up/down via HTTP in the loop above)
    - `recipes` MUST include `standard`, `empty`, and `large`
