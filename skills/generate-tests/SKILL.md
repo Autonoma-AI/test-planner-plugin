@@ -163,20 +163,28 @@ After completion:
 
 Spawn `test-case-generator`:
 
-> Read `autonoma/AUTONOMA.md`, `autonoma/skills/`, and `autonoma/scenarios.md` (the latter has
-> been reconciled with reality in step 5 — use it as the source of truth). Parse the
-> `variable_fields` frontmatter — test steps MUST use the `{{token}}` placeholders for any
-> variable value (typed, asserted, or navigated to), never the hardcoded literal.
-> Treat scenarios as fixture input, not as the subject under test — do NOT generate meta-tests
-> that "audit" seeded counts or fixture existence.
-> Generate test cases in `autonoma/qa-tests/`. Write `autonoma/qa-tests/INDEX.md` with
-> frontmatter (total_tests, total_folders, folder breakdown, coverage_correlation). Each test
-> file needs frontmatter (title, description, criticality, scenario, flow).
-> Fetch: `curl -sSfL "$(cat autonoma/.docs-url)/llms/test-planner/step-6-e2e-tests.txt"`.
+> Orchestrate E2E test generation through two phases:
+>
+> **Phase 1 - Plan**: Spawn the `test-planner-agent` to create the folder structure under
+> `autonoma/qa-tests/` with a `brief.md` in each folder. The planner reads `autonoma/AUTONOMA.md`,
+> `autonoma/skills/`, and `autonoma/scenarios.md` to identify feature areas and produce briefs
+> with the scenario entities, navigation, and scope for each folder.
+>
+> **Phase 2 - Write**: For each folder containing a `brief.md`, spawn the `test-writer-agent`
+> to write deep, action-driven tests. Start with Tier 1 folders. After each writer finishes,
+> check for new sub-folders with `brief.md` files (the writer creates these for complex
+> sub-features) and add them to the queue. Continue until the queue is empty.
+>
+> **Phase 3 - Index**: After all folders are processed, rewrite `autonoma/qa-tests/INDEX.md`
+> with final test counts, folder breakdowns, and coverage correlation.
+>
+> Variable fields from `autonoma/scenarios.md` frontmatter MUST use `{{token}}` placeholders
+> in test steps, never hardcoded literals. Scenarios are fixture input, not the subject under
+> test - do NOT generate meta-tests that audit seeded counts.
 
 After completion:
 1. Verify `autonoma/qa-tests/INDEX.md` exists
-2. Present INDEX summary
+2. Present INDEX summary (total tests, folder breakdown, tier distribution)
 3. `Write` `autonoma/.pipeline-complete` with a short summary. The hook emits `step.completed`
    for the final step, marking the setup complete.
 
@@ -184,8 +192,8 @@ After completion:
 
 Summarize each step:
 - **Step 1**: KB location, core flows
-- **Step 2**: entity audit — factories vs raw SQL
+- **Step 2**: entity audit - factories vs raw SQL
 - **Step 3**: scenarios generated
 - **Step 4**: endpoint implemented (handler path, packages, factories registered)
 - **Step 5**: lifecycle validated, scenario-recipes.json emitted, preflight passed, recipes uploaded, scenarios.md edits (if any)
-- **Step 6**: test count, folder breakdown
+- **Step 6**: test count, folder breakdown, sub-folders created by recursive writer
